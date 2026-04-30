@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Meus agendamentos | Studio MNunesnails</title>
+  <meta
+    name="description"
+    content="Veja, edite e acompanhe seus agendamentos no Studio MNunesnails."
+  >
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800&family=Playfair+Display:wght@600;700&display=swap"
+    rel="stylesheet"
+  >
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="page-shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">MN</div>
+        <div>
+          <p class="eyebrow">Studio MNunesnails</p>
+          <h1>Meus agendamentos</h1>
+        </div>
+      </div>
+      <nav class="top-actions" aria-label="Navegação principal">
+        <a class="ghost-button" href="index.html">Novo agendamento</a>
+        <a class="ghost-button" href="index.html#servicos">Serviços</a>
+      </nav>
+    </header>
+
+    <main class="appointments-page">
+      <section class="appointments-hero card">
+        <div>
+          <span class="badge">Área da cliente</span>
+          <h2>Acompanhe seus horários e ajuste detalhes antes do atendimento.</h2>
+        </div>
+        <div class="appointments-metrics" id="appointments-metrics">
+          <div>
+            <strong>0</strong>
+            <span>Total</span>
+          </div>
+          <div>
+            <strong>0</strong>
+            <span>Confirmados</span>
+          </div>
+          <div>
+            <strong>0</strong>
+            <span>Alterados</span>
+          </div>
+          <div>
+            <strong>0</strong>
+            <span>Cancelados</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="appointments-workspace">
+        <div class="appointments-list card">
+          <div class="appointments-toolbar">
+            <div>
+              <p class="eyebrow">Agenda</p>
+              <h2>Horários salvos</h2>
+            </div>
+            <div class="toolbar-controls">
+              <input type="search" id="appointment-search" placeholder="Buscar por nome, telefone ou serviço" aria-label="Buscar agendamentos">
+              <select id="status-filter" aria-label="Filtrar por status">
+                <option value="Todos">Todos</option>
+                <option value="Confirmado">Confirmados</option>
+                <option value="Alterado">Alterados</option>
+                <option value="Pendente">Pendentes</option>
+                <option value="Cancelado">Cancelados</option>
+              </select>
+            </div>
+          </div>
+          <div class="appointment-cards" id="appointment-cards"></div>
+        </div>
+
+        <form class="appointment-editor card" id="appointment-editor">
+          <div>
+            <p class="eyebrow">Editar</p>
+            <h2 id="editor-title">Selecione um agendamento</h2>
+          </div>
+
+          <input type="hidden" name="id">
+
+          <label>
+            Nome
+            <input type="text" name="name" required>
+          </label>
+
+          <label>
+            WhatsApp
+            <input type="tel" name="phone" required>
+          </label>
+
+          <label>
+            Serviço
+            <select name="service" id="editor-service" required>
+              <option value="Manicure clássica">Manicure clássica</option>
+              <option value="Banho em gel">Banho em gel</option>
+              <option value="Esmaltação em gel">Esmaltação em gel</option>
+              <option value="Spa das mãos">Spa das mãos</option>
+              <option value="Blindagem">Blindagem</option>
+              <option value="Pacote premium">Pacote premium</option>
+            </select>
+          </label>
+
+          <div class="editor-row">
+            <label>
+              Dia
+              <select name="date" id="editor-date" required></select>
+            </label>
+            <label>
+              Horário
+              <select name="time" id="editor-time" required></select>
+            </label>
+          </div>
+
+          <label>
+            Status
+            <select name="status" required>
+              <option value="Confirmado">Confirmado</option>
+              <option value="Alterado">Alterado</option>
+              <option value="Pendente">Pendente</option>
+              <option value="Cancelado">Cancelado</option>
+            </select>
+          </label>
+
+          <label>
+            Observações
+            <textarea name="notes" rows="4"></textarea>
+          </label>
+
+          <div class="editor-actions">
+            <button class="primary-button" type="submit">Salvar alterações</button>
+            <button class="secondary-button" type="button" id="duplicate-appointment">Duplicar</button>
+            <button class="danger-button" type="button" id="cancel-appointment">Cancelar agendamento</button>
+          </div>
+
+          <p class="editor-feedback" id="editor-feedback" role="status"></p>
+        </form>
+      </section>
+    </main>
+  </div>
+
+  <div class="toast" id="site-toast" role="status" aria-live="polite"></div>
+  <script src="agendamentos.js"></script>
+</body>
+</html>

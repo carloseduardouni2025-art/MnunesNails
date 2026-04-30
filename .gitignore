@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+mnunesnails.db
+server.out.log
+server.err.log
