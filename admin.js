@@ -21,6 +21,7 @@ const duplicateButton = document.getElementById("duplicate-appointment");
 const cancelButton = document.getElementById("cancel-appointment");
 const searchInput = document.getElementById("appointment-search");
 const statusFilter = document.getElementById("status-filter");
+const dateFilter = document.getElementById("date-filter");
 const metrics = document.getElementById("appointments-metrics");
 const toast = document.getElementById("site-toast");
 const logoutButton = document.getElementById("logout-button");
@@ -28,7 +29,7 @@ const sessionBadge = document.getElementById("session-badge");
 
 let selectedId = "";
 let appointments = [];
-let currentUser = null;
+let searchTimer = 0;
 
 function buildAvailability() {
   const dates = {};
@@ -72,17 +73,10 @@ function getStatusClass(status) {
 
 function getDateParts(dateLabel) {
   const [weekday = "Dia", date = dateLabel || "--/--"] = String(dateLabel || "").split(", ");
-  return {
-    weekday,
-    date
-  };
+  return { weekday, date };
 }
 
 function showToast(message) {
-  if (!toast) {
-    return;
-  }
-
   toast.textContent = message;
   toast.classList.add("show");
   window.clearTimeout(showToast.timeout);
@@ -106,6 +100,11 @@ async function requestJson(url, options = {}) {
     throw new Error("Login necessário.");
   }
 
+  if (response.status === 403) {
+    window.location.href = "agendamentos.html";
+    throw new Error("Acesso não permitido.");
+  }
+
   if (!response.ok) {
     throw new Error(result.error || "Não foi possível concluir a operação.");
   }
@@ -121,35 +120,13 @@ async function loadSession() {
     return false;
   }
 
-  if (result.session.role === "admin") {
-    window.location.href = "admin.html";
+  if (result.session.role !== "admin") {
+    window.location.href = "agendamentos.html";
     return false;
   }
 
-  currentUser = result.session.user;
-  sessionBadge.textContent = `Cliente · ${currentUser.name}`;
+  sessionBadge.textContent = `Admin · ${result.session.admin.name}`;
   return true;
-}
-
-async function loadAppointments() {
-  cardsContainer.innerHTML = "<div class='empty-state'>Carregando agendamentos...</div>";
-
-  try {
-    const result = await requestJson("/api/appointments");
-    appointments = result.appointments || [];
-    renderAppointments();
-
-    const selected = appointments.find((appointment) => appointment.id === selectedId) || appointments[0];
-
-    if (selected) {
-      fillEditor(selected);
-    } else {
-      resetEditor();
-    }
-  } catch (error) {
-    cardsContainer.innerHTML = `<div class="empty-state">${escapeHtml(error.message)}</div>`;
-    resetEditor();
-  }
 }
 
 function populateDateOptions(selectedDate = "") {
@@ -162,6 +139,15 @@ function populateDateOptions(selectedDate = "") {
   editorDate.innerHTML = dates
     .map((date) => `<option value="${escapeHtml(date)}">${escapeHtml(date)}</option>`)
     .join("");
+}
+
+function populateDateFilter() {
+  Object.keys(availability).forEach((date) => {
+    const option = document.createElement("option");
+    option.value = date;
+    option.textContent = date;
+    dateFilter.appendChild(option);
+  });
 }
 
 function populateTimeOptions(date, selectedTime = "") {
@@ -180,30 +166,43 @@ function populateTimeOptions(date, selectedTime = "") {
   }
 }
 
-function getFilteredAppointments() {
-  const filter = statusFilter.value;
-  const searchTerm = searchInput.value.trim().toLowerCase();
-  let filteredAppointments = appointments;
+function buildAppointmentsUrl() {
+  const params = new URLSearchParams();
 
-  if (filter !== "Todos") {
-    filteredAppointments = filteredAppointments.filter((appointment) => appointment.status === filter);
+  if (statusFilter.value) {
+    params.set("status", statusFilter.value);
   }
 
-  if (!searchTerm) {
-    return filteredAppointments;
+  if (dateFilter.value) {
+    params.set("date", dateFilter.value);
   }
 
-  return filteredAppointments.filter((appointment) => {
-    const searchable = [
-      appointment.name,
-      appointment.phone,
-      appointment.service,
-      appointment.date,
-      appointment.status
-    ].join(" ").toLowerCase();
+  if (searchInput.value.trim()) {
+    params.set("search", searchInput.value.trim());
+  }
 
-    return searchable.includes(searchTerm);
-  });
+  return `/api/appointments${params.toString() ? `?${params.toString()}` : ""}`;
+}
+
+async function loadAppointments() {
+  cardsContainer.innerHTML = "<div class='empty-state'>Carregando agendamentos...</div>";
+
+  try {
+    const result = await requestJson(buildAppointmentsUrl());
+    appointments = result.appointments || [];
+    renderAppointments();
+
+    const selected = appointments.find((appointment) => appointment.id === selectedId) || appointments[0];
+
+    if (selected) {
+      fillEditor(selected);
+    } else {
+      resetEditor();
+    }
+  } catch (error) {
+    cardsContainer.innerHTML = `<div class="empty-state">${escapeHtml(error.message)}</div>`;
+    resetEditor();
+  }
 }
 
 function renderMetrics() {
@@ -232,19 +231,18 @@ function renderMetrics() {
 }
 
 function renderAppointments() {
-  const filteredAppointments = getFilteredAppointments();
   renderMetrics();
 
-  if (!filteredAppointments.length) {
+  if (!appointments.length) {
     cardsContainer.innerHTML = `
       <div class="empty-state">
-        Nenhum agendamento encontrado. Crie um novo horário para ele aparecer aqui.
+        Nenhum agendamento encontrado para os filtros atuais.
       </div>
     `;
     return;
   }
 
-  cardsContainer.innerHTML = filteredAppointments
+  cardsContainer.innerHTML = appointments
     .map((appointment) => {
       const dateParts = getDateParts(appointment.date);
       const notes = appointment.notes
@@ -408,17 +406,19 @@ async function cancelAppointment() {
   }
 }
 
-cardsContainer.addEventListener("click", (event) => {
-  const card = event.target.closest(".appointment-card");
-
-  if (!card) {
-    return;
-  }
-
+function selectCard(card) {
   const appointment = appointments.find((item) => item.id === card.dataset.id);
 
   if (appointment) {
     fillEditor(appointment);
+  }
+}
+
+cardsContainer.addEventListener("click", (event) => {
+  const card = event.target.closest(".appointment-card");
+
+  if (card) {
+    selectCard(card);
   }
 });
 
@@ -434,19 +434,19 @@ cardsContainer.addEventListener("keydown", (event) => {
   }
 
   event.preventDefault();
-  const appointment = appointments.find((item) => item.id === card.dataset.id);
-
-  if (appointment) {
-    fillEditor(appointment);
-  }
+  selectCard(card);
 });
 
 editorDate.addEventListener("change", () => {
   populateTimeOptions(editorDate.value);
 });
 
-statusFilter.addEventListener("change", renderAppointments);
-searchInput.addEventListener("input", renderAppointments);
+statusFilter.addEventListener("change", loadAppointments);
+dateFilter.addEventListener("change", loadAppointments);
+searchInput.addEventListener("input", () => {
+  window.clearTimeout(searchTimer);
+  searchTimer = window.setTimeout(loadAppointments, 220);
+});
 editor.addEventListener("submit", updateAppointment);
 duplicateButton.addEventListener("click", duplicateAppointment);
 cancelButton.addEventListener("click", cancelAppointment);
@@ -456,6 +456,7 @@ logoutButton.addEventListener("click", async () => {
 });
 
 populateDateOptions();
+populateDateFilter();
 populateTimeOptions(Object.keys(availability)[0]);
 resetEditor();
 
