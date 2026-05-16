@@ -43,6 +43,11 @@ Rotas principais:
 
 Na primeira execução, o servidor cria um administrador padrão:
 
-- Nome: `Administrador`
 - Celular: `00000000000`
 - Senha: `admin123`
+
+## Login e cadastro
+
+- Login de cliente: celular e senha.
+- Cadastro de cliente: nome, WhatsApp e senha.
+- Login administrativo: celular e senha.

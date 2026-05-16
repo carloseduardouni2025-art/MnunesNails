@@ -1,7 +1,8 @@
 const clientForm = document.getElementById("client-login-form");
+const clientRegisterForm = document.getElementById("client-register-form");
 const adminForm = document.getElementById("admin-login-form");
-const clientRegisterButton = document.getElementById("client-register-button");
 const clientFeedback = document.getElementById("client-login-feedback");
+const clientRegisterFeedback = document.getElementById("client-register-feedback");
 const adminFeedback = document.getElementById("admin-login-feedback");
 const toast = document.getElementById("site-toast");
 
@@ -16,12 +17,19 @@ function showToast(message) {
 
 function formPayload(form) {
   const formData = new FormData(form);
+  const payload = {};
 
-  return {
-    name: formData.get("name").toString().trim(),
-    phone: formData.get("phone").toString().trim(),
-    password: formData.get("password").toString()
-  };
+  formData.forEach((value, key) => {
+    payload[key] = key === "password" ? value.toString() : value.toString().trim();
+  });
+
+  return payload;
+}
+
+function registerPayload() {
+  const payload = formPayload(clientRegisterForm);
+  payload.phone = payload.whatsapp;
+  return payload;
 }
 
 async function requestJson(url, payload) {
@@ -55,15 +63,16 @@ async function submitClientLogin(event) {
   }
 }
 
-async function submitClientRegister() {
-  clientFeedback.textContent = "Criando acesso...";
+async function submitClientRegister(event) {
+  event.preventDefault();
+  clientRegisterFeedback.textContent = "Criando cadastro...";
 
   try {
-    await requestJson("/api/auth/register", formPayload(clientForm));
-    showToast("Acesso criado.");
+    await requestJson("/api/auth/register", registerPayload());
+    showToast("Cadastro criado.");
     window.location.href = "agendamentos.html";
   } catch (error) {
-    clientFeedback.textContent = error.message;
+    clientRegisterFeedback.textContent = error.message;
     showToast(error.message);
   }
 }
@@ -83,5 +92,5 @@ async function submitAdminLogin(event) {
 }
 
 clientForm.addEventListener("submit", submitClientLogin);
-clientRegisterButton.addEventListener("click", submitClientRegister);
+clientRegisterForm.addEventListener("submit", submitClientRegister);
 adminForm.addEventListener("submit", submitAdminLogin);

@@ -88,6 +88,7 @@ def init_database():
               name TEXT NOT NULL,
               phone TEXT NOT NULL,
               phone_normalized TEXT NOT NULL UNIQUE,
+              whatsapp TEXT NOT NULL DEFAULT '',
               password_salt TEXT,
               password_hash TEXT,
               created_at TEXT NOT NULL,
@@ -135,6 +136,7 @@ def init_database():
               ON sessions(actor_type, actor_id);
             """
         )
+        ensure_column(connection, "users", "whatsapp", "whatsapp TEXT NOT NULL DEFAULT ''")
         ensure_column(connection, "users", "password_salt", "password_salt TEXT")
         ensure_column(connection, "users", "password_hash", "password_hash TEXT")
         ensure_default_admin(connection)
@@ -173,6 +175,7 @@ def row_to_user(row):
         "id": row["id"],
         "name": row["name"],
         "phone": row["phone"],
+        "whatsapp": row["whatsapp"] if "whatsapp" in row.keys() else "",
         "createdAt": row["created_at"],
         "updatedAt": row["updated_at"],
     }
@@ -194,6 +197,7 @@ def row_to_appointment(row):
         "userId": row["user_id"],
         "name": row["name"],
         "phone": row["phone"],
+        "whatsapp": row["whatsapp"] if "whatsapp" in row.keys() else "",
         "service": row["service"],
         "date": row["appointment_date"],
         "time": row["appointment_time"],
@@ -216,6 +220,20 @@ def validate_user_payload(payload):
         raise ValueError("Informe um telefone valido com DDD.")
 
     return name, phone, phone_normalized
+
+
+def validate_registration_payload(payload):
+    if not str(payload.get("phone", "")).strip() and str(payload.get("whatsapp", "")).strip():
+        payload = {**payload, "phone": payload.get("whatsapp", "")}
+
+    name, phone, phone_normalized = validate_user_payload(payload)
+    whatsapp = str(payload.get("whatsapp", "")).strip()
+    whatsapp_normalized = normalize_phone(whatsapp)
+
+    if len(whatsapp_normalized) < 10:
+        raise ValueError("Informe um WhatsApp valido com DDD.")
+
+    return name, phone, phone_normalized, whatsapp
 
 
 def validate_password_payload(payload):
@@ -269,27 +287,28 @@ def find_user_by_id(connection, user_id):
     ).fetchone()
 
 
-def upsert_user(connection, name, phone, phone_normalized):
+def upsert_user(connection, name, phone, phone_normalized, whatsapp=""):
     timestamp = now_iso()
     existing = find_user_by_phone(connection, phone_normalized)
+    whatsapp = whatsapp or phone
 
     if existing:
         connection.execute(
             """
             UPDATE users
-               SET name = ?, phone = ?, updated_at = ?
+               SET name = ?, phone = ?, whatsapp = ?, updated_at = ?
              WHERE id = ?
             """,
-            (name, phone, timestamp, existing["id"]),
+            (name, phone, whatsapp, timestamp, existing["id"]),
         )
         return existing["id"]
 
     cursor = connection.execute(
         """
-        INSERT INTO users (name, phone, phone_normalized, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO users (name, phone, phone_normalized, whatsapp, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?)
         """,
-        (name, phone, phone_normalized, timestamp, timestamp),
+        (name, phone, phone_normalized, whatsapp, timestamp, timestamp),
     )
     return cursor.lastrowid
 
@@ -341,7 +360,7 @@ def create_session(actor_type, actor_id):
 
 
 def register_user(payload):
-    name, phone, phone_normalized = validate_user_payload(payload)
+    name, phone, phone_normalized, whatsapp = validate_registration_payload(payload)
     password = validate_password_payload(payload)
 
     with get_connection() as connection:
@@ -350,7 +369,7 @@ def register_user(payload):
         if existing and existing["password_hash"]:
             raise ValueError("Este telefone ja possui acesso. Use entrar.")
 
-        user_id = upsert_user(connection, name, phone, phone_normalized)
+        user_id = upsert_user(connection, name, phone, phone_normalized, whatsapp)
         set_user_password(connection, user_id, password)
         user = find_user_by_id(connection, user_id)
 
@@ -359,13 +378,9 @@ def register_user(payload):
 
 
 def login_user(payload):
-    name = str(payload.get("name", "")).strip()
     phone = str(payload.get("phone", "")).strip()
     phone_normalized = normalize_phone(phone)
     password = validate_password_payload(payload)
-
-    if not name:
-        raise ValueError("Informe o nome.")
 
     with get_connection() as connection:
         user = find_user_by_phone(connection, phone_normalized)
@@ -373,24 +388,14 @@ def login_user(payload):
         if not user or not verify_password(password, user["password_salt"], user["password_hash"]):
             raise AuthError("Telefone ou senha invalidos.")
 
-        connection.execute(
-            "UPDATE users SET name = ?, phone = ?, updated_at = ? WHERE id = ?",
-            (name, phone, now_iso(), user["id"]),
-        )
-        user = find_user_by_id(connection, user["id"])
-
     token = create_session("user", user["id"])
     return row_to_user(user), token
 
 
 def login_admin(payload):
-    name = str(payload.get("name", "")).strip()
     phone = str(payload.get("phone", "")).strip()
     phone_normalized = normalize_phone(phone)
     password = validate_password_payload(payload)
-
-    if not name:
-        raise ValueError("Informe o nome.")
 
     with get_connection() as connection:
         admin = connection.execute(
@@ -400,15 +405,6 @@ def login_admin(payload):
 
         if not admin or not verify_password(password, admin["password_salt"], admin["password_hash"]):
             raise AuthError("Telefone ou senha de administrador invalidos.")
-
-        connection.execute(
-            "UPDATE admins SET name = ?, phone = ?, updated_at = ? WHERE id = ?",
-            (name, phone, now_iso(), admin["id"]),
-        )
-        admin = connection.execute(
-            "SELECT * FROM admins WHERE id = ?",
-            (admin["id"],),
-        ).fetchone()
 
     token = create_session("admin", admin["id"])
     return row_to_admin(admin), token
@@ -494,12 +490,13 @@ def list_appointments(session, filters=None):
             (
               users.name LIKE ?
               OR users.phone LIKE ?
+              OR users.whatsapp LIKE ?
               OR users.phone_normalized LIKE ?
               OR appointments.service LIKE ?
             )
             """
         )
-        params.extend([like, like, like, like])
+        params.extend([like, like, like, like, like])
 
     where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
 
@@ -509,7 +506,8 @@ def list_appointments(session, filters=None):
             SELECT
               appointments.*,
               users.name,
-              users.phone
+              users.phone,
+              users.whatsapp
             FROM appointments
             JOIN users ON users.id = appointments.user_id
             {where}
@@ -527,7 +525,8 @@ def get_appointment(appointment_id):
             SELECT
               appointments.*,
               users.name,
-              users.phone
+              users.phone,
+              users.whatsapp
             FROM appointments
             JOIN users ON users.id = appointments.user_id
             WHERE appointments.id = ?

@@ -42,13 +42,8 @@
         <form class="auth-card card" id="client-login-form">
           <div>
             <p class="eyebrow">Cliente</p>
-            <h2>Meus agendamentos</h2>
+            <h2>Entrar</h2>
           </div>
-
-          <label>
-            Nome
-            <input type="text" name="name" placeholder="Seu nome completo" required>
-          </label>
 
           <label>
             Celular
@@ -60,12 +55,34 @@
             <input type="password" name="password" placeholder="Sua senha" required>
           </label>
 
-          <div class="auth-actions">
-            <button class="primary-button" type="submit">Entrar</button>
-            <button class="secondary-button" type="button" id="client-register-button">Criar acesso</button>
-          </div>
+          <button class="primary-button" type="submit">Entrar</button>
 
           <p class="editor-feedback" id="client-login-feedback" role="status"></p>
+        </form>
+
+        <form class="auth-card card" id="client-register-form">
+          <div>
+            <p class="eyebrow">Cadastro</p>
+            <h2>Criar acesso</h2>
+          </div>
+
+          <label>
+            Nome
+            <input type="text" name="name" placeholder="Seu nome completo" required>
+          </label>
+
+          <label>
+            WhatsApp
+            <input type="tel" name="whatsapp" placeholder="(11) 99999-9999" required>
+          </label>
+
+          <label>
+            Senha
+            <input type="password" name="password" placeholder="Crie uma senha" required>
+          </label>
+
+          <button class="primary-button" type="submit">Criar cadastro</button>
+          <p class="editor-feedback" id="client-register-feedback" role="status"></p>
         </form>
 
         <form class="auth-card card" id="admin-login-form">
@@ -73,11 +90,6 @@
             <p class="eyebrow">Administrador</p>
             <h2>Agenda geral</h2>
           </div>
-
-          <label>
-            Nome
-            <input type="text" name="name" placeholder="Nome do administrador" required>
-          </label>
 
           <label>
             Celular
