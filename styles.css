@@ -513,9 +513,13 @@ textarea:focus-visible,
 
 .auth-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 24px;
   align-items: start;
+}
+
+.auth-grid-single {
+  max-width: 460px;
 }
 
 .auth-card {

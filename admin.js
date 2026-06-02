@@ -96,7 +96,7 @@ async function requestJson(url, options = {}) {
   const result = await response.json();
 
   if (response.status === 401) {
-    window.location.href = "login.html";
+    window.location.href = "admin-login.html";
     throw new Error("Login necessário.");
   }
 
@@ -116,7 +116,7 @@ async function loadSession() {
   const result = await requestJson("/api/auth/me");
 
   if (!result.authenticated) {
-    window.location.href = "login.html";
+    window.location.href = "admin-login.html";
     return false;
   }
 
@@ -452,7 +452,7 @@ duplicateButton.addEventListener("click", duplicateAppointment);
 cancelButton.addEventListener("click", cancelAppointment);
 logoutButton.addEventListener("click", async () => {
   await requestJson("/api/auth/logout", { method: "POST" });
-  window.location.href = "login.html";
+  window.location.href = "admin-login.html";
 });
 
 populateDateOptions();

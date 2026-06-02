@@ -91,6 +91,14 @@ async function submitAdminLogin(event) {
   }
 }
 
-clientForm.addEventListener("submit", submitClientLogin);
-clientRegisterForm.addEventListener("submit", submitClientRegister);
-adminForm.addEventListener("submit", submitAdminLogin);
+if (clientForm) {
+  clientForm.addEventListener("submit", submitClientLogin);
+}
+
+if (clientRegisterForm) {
+  clientRegisterForm.addEventListener("submit", submitClientRegister);
+}
+
+if (adminForm) {
+  adminForm.addEventListener("submit", submitAdminLogin);
+}

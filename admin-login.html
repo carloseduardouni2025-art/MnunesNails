@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Acesso administrativo | Studio MNunesnails</title>
+  <meta
+    name="description"
+    content="Acesso restrito para administrar a agenda do Studio MNunesnails."
+  >
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800&family=Playfair+Display:wght@600;700&display=swap"
+    rel="stylesheet"
+  >
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="page-shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">MN</div>
+        <div>
+          <p class="eyebrow">Studio MNunesnails</p>
+          <h1>Acesso administrativo</h1>
+        </div>
+      </div>
+      <nav class="top-actions" aria-label="Navegacao principal">
+        <a class="ghost-button" href="index.html">Inicio</a>
+      </nav>
+    </header>
+
+    <main class="auth-page">
+      <section class="auth-hero card">
+        <span class="badge">Acesso restrito</span>
+        <h2>Entre para administrar a agenda do studio.</h2>
+      </section>
+
+      <section class="auth-grid auth-grid-single">
+        <form class="auth-card card" id="admin-login-form">
+          <div>
+            <p class="eyebrow">Administrador</p>
+            <h2>Agenda geral</h2>
+          </div>
+
+          <label>
+            Celular
+            <input type="tel" name="phone" placeholder="Telefone de acesso" required>
+          </label>
+
+          <label>
+            Senha
+            <input type="password" name="password" placeholder="Senha administrativa" required>
+          </label>
+
+          <button class="primary-button" type="submit">Entrar como admin</button>
+          <p class="editor-feedback" id="admin-login-feedback" role="status"></p>
+        </form>
+      </section>
+    </main>
+  </div>
+
+  <div class="toast" id="site-toast" role="status" aria-live="polite"></div>
+  <script src="login.js"></script>
+</body>
+</html>
