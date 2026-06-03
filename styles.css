@@ -513,9 +513,10 @@ textarea:focus-visible,
 
 .auth-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: minmax(280px, 460px);
   gap: 24px;
-  align-items: start;
+  justify-content: center;
+  align-items: stretch;
 }
 
 .auth-grid-single {
@@ -523,10 +524,221 @@ textarea:focus-visible,
 }
 
 .auth-card {
+  grid-template-rows: auto repeat(3, auto) 1fr auto auto;
   padding: 28px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(255, 246, 250, 0.82)),
     var(--surface);
+}
+
+.auth-card .primary-button {
+  align-self: end;
+}
+
+.auth-card .editor-feedback {
+  min-height: 22px;
+}
+
+.auth-card[hidden] {
+  display: none;
+}
+
+.auth-page-compact {
+  min-height: calc(100vh - 58px);
+  place-content: center;
+  padding: 32px 14px;
+}
+
+.auth-topbar {
+  display: flex;
+  align-items: center;
+  min-height: 58px;
+  padding: 0 clamp(20px, 5vw, 52px);
+  background: var(--button-pink);
+  box-shadow: 0 2px 10px rgba(124, 56, 87, 0.16);
+}
+
+.auth-home-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  color: white;
+  font-size: 1.45rem;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
+.auth-home-mark {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 2px solid rgba(255, 255, 255, 0.92);
+  border-radius: 999px;
+  font-size: 0.78rem;
+  line-height: 1;
+}
+
+.auth-topbar-admin {
+  background: #3a1c28;
+}
+
+.auth-page-compact .auth-grid {
+  width: min(100%, 500px);
+}
+
+.auth-card-compact {
+  gap: 18px;
+  padding: 34px 32px 30px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 12px 30px rgba(36, 22, 28, 0.16);
+}
+
+.auth-card-admin {
+  border-color: rgba(58, 28, 40, 0.25);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.97), rgba(255, 245, 249, 0.95)),
+    var(--surface);
+}
+
+.admin-auth-badge {
+  justify-self: center;
+  padding: 7px 12px;
+  border-radius: 999px;
+  color: white;
+  background: #3a1c28;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.admin-auth-note {
+  margin: 6px 0 0;
+  color: var(--muted);
+  text-align: center;
+  font-size: 0.9rem;
+}
+
+.auth-card-header {
+  display: grid;
+  gap: 8px;
+  text-align: center;
+}
+
+.auth-card-header h1 {
+  margin: 0;
+  color: #090609;
+  font-family: "DM Sans", sans-serif;
+  font-size: clamp(1.75rem, 4vw, 2.2rem);
+  line-height: 1.08;
+}
+
+.auth-card-header p {
+  margin: 0;
+  color: #2e2529;
+}
+
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--muted);
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: "";
+  height: 1px;
+  flex: 1;
+  background: rgba(124, 56, 87, 0.22);
+}
+
+.auth-card-compact label {
+  gap: 9px;
+  color: #1c1519;
+  font-weight: 800;
+}
+
+.auth-card-compact input {
+  min-height: 48px;
+  border-radius: 9px;
+  border-color: #21191d;
+  background: #fff;
+  box-shadow: none;
+}
+
+.auth-card-compact input:focus {
+  border-color: #090609;
+  box-shadow: 0 0 0 3px rgba(216, 95, 141, 0.18);
+}
+
+.password-field {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  border: 1px solid #21191d;
+  border-radius: 9px;
+  background: #fff;
+}
+
+.password-field:focus-within {
+  border-color: #090609;
+  box-shadow: 0 0 0 3px rgba(216, 95, 141, 0.18);
+}
+
+.password-field input {
+  border: 0;
+}
+
+.password-field input:focus {
+  box-shadow: none;
+}
+
+.password-toggle {
+  min-width: 74px;
+  height: 100%;
+  border: 0;
+  color: var(--button-pink);
+  background: transparent;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.auth-forgot-link {
+  justify-self: center;
+  text-align: center;
+  color: var(--button-pink);
+  font-weight: 800;
+  text-decoration: underline;
+}
+
+.auth-submit {
+  min-height: 48px;
+  border-radius: 8px;
+}
+
+.auth-switch {
+  margin: 8px 0 0;
+  color: #6e6268;
+  text-align: center;
+}
+
+.auth-switch button {
+  border: 0;
+  padding: 0 0 0 6px;
+  color: var(--button-pink);
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.auth-switch button:hover {
+  text-decoration: underline;
 }
 
 .auth-card label {
@@ -534,6 +746,12 @@ textarea:focus-visible,
   gap: 8px;
   color: var(--muted);
   font-weight: 500;
+}
+
+.auth-card-compact label {
+  gap: 9px;
+  color: #1c1519;
+  font-weight: 800;
 }
 
 .auth-actions {
@@ -593,7 +811,7 @@ textarea:focus-visible,
 
 .appointments-workspace {
   display: grid;
-  grid-template-columns: minmax(0, 0.9fr) minmax(320px, 1.1fr);
+  grid-template-columns: minmax(360px, 0.95fr) minmax(360px, 1.05fr);
   gap: 24px;
   align-items: start;
 }
@@ -604,6 +822,7 @@ textarea:focus-visible,
 }
 
 .appointments-list {
+  min-width: 0;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(255, 246, 250, 0.8)),
     var(--surface);
@@ -619,9 +838,10 @@ textarea:focus-visible,
 
 .toolbar-controls {
   display: grid;
-  grid-template-columns: minmax(230px, 1fr) minmax(150px, 190px);
+  grid-template-columns: minmax(0, 1fr) minmax(130px, 170px);
   gap: 12px;
   width: 100%;
+  min-width: 0;
   padding: 12px;
   border-radius: 22px;
   background: rgba(255, 255, 255, 0.58);
@@ -629,11 +849,13 @@ textarea:focus-visible,
 }
 
 .admin-toolbar-controls {
-  grid-template-columns: minmax(220px, 1fr) minmax(150px, 190px) minmax(150px, 190px);
+  grid-template-columns: minmax(0, 1fr) minmax(120px, 160px) minmax(120px, 160px);
 }
 
 .toolbar-controls input,
 .toolbar-controls select {
+  width: 100%;
+  min-width: 0;
   min-height: 48px;
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.94);
@@ -647,6 +869,7 @@ textarea:focus-visible,
   grid-template-columns: 82px minmax(0, 1fr);
   gap: 16px;
   width: 100%;
+  min-width: 0;
   min-height: 142px;
   padding: 14px;
   text-align: left;
@@ -680,7 +903,6 @@ textarea:focus-visible,
 
 .appointment-card:hover,
 .appointment-card.active {
-  transform: translateY(-3px);
   border-color: rgba(216, 95, 141, 0.55);
   box-shadow: 0 18px 42px rgba(124, 56, 87, 0.14);
 }
@@ -737,14 +959,20 @@ textarea:focus-visible,
   justify-content: space-between;
   align-items: center;
   gap: 10px;
+  min-width: 0;
 }
 
 .appointment-time {
+  flex: 0 0 auto;
+  max-width: 92px;
   padding: 6px 10px;
   border-radius: 999px;
   color: white;
   background: var(--button-pink);
   font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   box-shadow: 0 8px 18px rgba(216, 95, 141, 0.18);
 }
 
@@ -825,7 +1053,7 @@ textarea:focus-visible,
 .editor-row,
 .editor-actions {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 14px;
 }
 
@@ -838,6 +1066,133 @@ textarea:focus-visible,
 
 .danger-button:hover {
   background: #c75b6b;
+}
+
+.admin-management {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.management-panel {
+  display: grid;
+  gap: 20px;
+  padding: 28px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(255, 246, 250, 0.8)),
+    var(--surface);
+}
+
+.management-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: start;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(216, 95, 141, 0.16);
+}
+
+.management-heading h2,
+.availability-day h3 {
+  margin: 0;
+  font-family: "Playfair Display", serif;
+}
+
+.management-hint {
+  max-width: 260px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.availability-board,
+.users-board {
+  display: grid;
+  gap: 16px;
+}
+
+.availability-day {
+  display: grid;
+  gap: 12px;
+}
+
+.availability-day h3 {
+  font-size: 1.18rem;
+}
+
+.availability-slots {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+  gap: 10px;
+}
+
+.availability-slot {
+  display: grid;
+  gap: 4px;
+  min-height: 70px;
+  padding: 12px;
+  border-radius: 16px;
+  text-align: left;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid rgba(216, 95, 141, 0.18);
+  color: var(--ink);
+}
+
+.availability-slot strong {
+  font-size: 1.06rem;
+}
+
+.availability-slot span {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.availability-slot.is-free {
+  border-color: rgba(35, 114, 70, 0.28);
+  background: rgba(214, 255, 232, 0.72);
+}
+
+.availability-slot.is-blocked {
+  border-color: rgba(155, 47, 58, 0.28);
+  background: rgba(255, 224, 224, 0.72);
+}
+
+.user-card {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(216, 95, 141, 0.16);
+}
+
+.user-card-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.user-card-header span {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.user-card label {
+  display: grid;
+  gap: 7px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.user-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
 }
 
 .danger-button:disabled,
@@ -896,6 +1251,18 @@ select:focus,
 textarea:focus {
   border-color: var(--primary);
   box-shadow: 0 0 0 4px rgba(216, 95, 141, 0.12);
+}
+
+.field-prefilled input {
+  color: var(--primary-dark);
+  background: rgba(255, 224, 234, 0.35);
+  border-color: rgba(216, 95, 141, 0.28);
+}
+
+.field-prefilled::after {
+  content: "Preenchido pela sua conta";
+  color: var(--muted);
+  font-size: 0.82rem;
 }
 
 .time-slots {
@@ -1042,6 +1409,7 @@ summary {
   .booking-layout,
   .appointments-hero,
   .appointments-workspace,
+  .admin-management,
   .auth-grid,
   .service-grid,
   .benefits-grid,
@@ -1076,6 +1444,7 @@ summary {
   .appointments-hero,
   .appointments-list,
   .appointment-editor,
+  .management-panel,
   .auth-hero,
   .auth-card,
   .booking-form,
@@ -1096,6 +1465,23 @@ summary {
 
   .toolbar-controls {
     width: 100%;
+  }
+}
+
+@media (max-width: 1120px) {
+  .appointments-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .appointment-cards {
+    max-height: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .admin-toolbar-controls,
+  .toolbar-controls {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -1133,6 +1519,11 @@ summary {
   .editor-actions,
   .auth-actions {
     grid-template-columns: 1fr;
+  }
+
+  .management-heading,
+  .user-card-header {
+    display: grid;
   }
 
   .appointments-toolbar {

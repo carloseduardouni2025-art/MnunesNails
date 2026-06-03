@@ -143,10 +143,35 @@
             <button class="primary-button" type="submit">Salvar alterações</button>
             <button class="secondary-button" type="button" id="duplicate-appointment">Duplicar</button>
             <button class="danger-button" type="button" id="cancel-appointment">Cancelar agendamento</button>
+            <button class="danger-button" type="button" id="delete-appointment">Excluir agendamento</button>
           </div>
 
           <p class="editor-feedback" id="editor-feedback" role="status"></p>
         </form>
+      </section>
+
+      <section class="admin-management">
+        <div class="management-panel card">
+          <div class="management-heading">
+            <div>
+              <p class="eyebrow">Disponibilidade</p>
+              <h2>Horarios livres</h2>
+            </div>
+            <p class="management-hint">Clique em um horario para alternar entre livre e bloqueado.</p>
+          </div>
+          <div class="availability-board" id="availability-board"></div>
+        </div>
+
+        <div class="management-panel card">
+          <div class="management-heading">
+            <div>
+              <p class="eyebrow">Clientes</p>
+              <h2>Usuarios cadastrados</h2>
+            </div>
+            <p class="management-hint">Edite nome, telefone e WhatsApp dos clientes.</p>
+          </div>
+          <div class="users-board" id="users-board"></div>
+        </div>
       </section>
     </main>
   </div>

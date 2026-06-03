@@ -17,76 +17,85 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div class="page-shell">
-    <header class="topbar">
-      <div class="brand">
-        <div class="brand-mark">MN</div>
-        <div>
-          <p class="eyebrow">Studio MNunesnails</p>
-          <h1>Acesso a agenda</h1>
+  <header class="auth-topbar">
+    <a class="auth-home-link" href="index.html" aria-label="Voltar para a pagina inicial">
+      <span class="auth-home-mark">MN</span>
+      <span>MNunesnails</span>
+    </a>
+  </header>
+
+  <main class="auth-page auth-page-compact">
+    <section class="auth-grid auth-grid-single">
+      <form class="auth-card auth-card-compact card" id="client-login-form">
+        <div class="auth-card-header">
+          <h1>Acesse sua conta</h1>
+          <p>Entre para acompanhar seus horarios no Studio MNunesnails.</p>
         </div>
-      </div>
-      <nav class="top-actions" aria-label="Navegacao principal">
-        <a class="ghost-button" href="index.html">Inicio</a>
-        <a class="ghost-button" href="index.html#agendamento">Agendar</a>
-      </nav>
-    </header>
 
-    <main class="auth-page">
-      <section class="auth-hero card">
-        <span class="badge">Area segura</span>
-        <h2>Entre para acompanhar seus horarios no Studio MNunesnails.</h2>
-      </section>
+        <div class="auth-divider"><span>ou</span></div>
 
-      <section class="auth-grid">
-        <form class="auth-card card" id="client-login-form">
-          <div>
-            <p class="eyebrow">Cliente</p>
-            <h2>Entrar</h2>
-          </div>
+        <label>
+          Celular
+          <input type="tel" name="phone" placeholder="(11) 99999-9999" required autofocus>
+        </label>
 
-          <label>
-            Celular
-            <input type="tel" name="phone" placeholder="(11) 99999-9999" required>
-          </label>
+        <label>
+          Informe sua senha
+          <span class="password-field">
+            <input type="password" name="password" placeholder="Digite sua senha" required>
+            <button class="password-toggle" type="button" data-password-toggle aria-label="Mostrar senha">Ver</button>
+          </span>
+        </label>
 
-          <label>
-            Senha
-            <input type="password" name="password" placeholder="Sua senha" required>
-          </label>
+        <a class="auth-forgot-link" href="index.html#agendamento">Voltar para agendar</a>
 
-          <button class="primary-button" type="submit">Entrar</button>
+        <button class="primary-button auth-submit" type="submit">Entrar</button>
 
-          <p class="editor-feedback" id="client-login-feedback" role="status"></p>
-        </form>
+        <p class="auth-switch">
+          Nao tem uma conta?
+          <button type="button" id="show-register-button">Crie sua conta</button>
+        </p>
 
-        <form class="auth-card card" id="client-register-form">
-          <div>
-            <p class="eyebrow">Cadastro</p>
-            <h2>Criar acesso</h2>
-          </div>
+        <p class="editor-feedback" id="client-login-feedback" role="status"></p>
+      </form>
 
-          <label>
-            Nome
-            <input type="text" name="name" placeholder="Seu nome completo" required>
-          </label>
+      <form class="auth-card auth-card-compact card" id="client-register-form" hidden>
+        <div class="auth-card-header">
+          <h1>Crie sua conta</h1>
+          <p>Cadastre seus dados para acompanhar os agendamentos.</p>
+        </div>
 
-          <label>
-            WhatsApp
-            <input type="tel" name="whatsapp" placeholder="(11) 99999-9999" required>
-          </label>
+        <div class="auth-divider"><span>ou</span></div>
 
-          <label>
-            Senha
+        <label>
+          Nome
+          <input type="text" name="name" placeholder="Seu nome completo" required>
+        </label>
+
+        <label>
+          WhatsApp
+          <input type="tel" name="whatsapp" placeholder="(11) 99999-9999" required>
+        </label>
+
+        <label>
+          Informe sua senha
+          <span class="password-field">
             <input type="password" name="password" placeholder="Crie uma senha" required>
-          </label>
+            <button class="password-toggle" type="button" data-password-toggle aria-label="Mostrar senha">Ver</button>
+          </span>
+        </label>
 
-          <button class="primary-button" type="submit">Criar cadastro</button>
-          <p class="editor-feedback" id="client-register-feedback" role="status"></p>
-        </form>
-      </section>
-    </main>
-  </div>
+        <button class="primary-button auth-submit" type="submit">Criar cadastro</button>
+
+        <p class="auth-switch">
+          Ja tem uma conta?
+          <button type="button" id="show-login-button">Entrar</button>
+        </p>
+
+        <p class="editor-feedback" id="client-register-feedback" role="status"></p>
+      </form>
+    </section>
+  </main>
 
   <div class="toast" id="site-toast" role="status" aria-live="polite"></div>
   <script src="login.js"></script>

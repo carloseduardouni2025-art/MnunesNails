@@ -9,7 +9,9 @@ const dailySlots = {
 
 const weekdayFormatter = new Intl.DateTimeFormat("pt-BR", { weekday: "long" });
 const shortDateFormatter = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit" });
-const availability = buildAvailability();
+let availability = {};
+let availabilityGroups = [];
+let users = [];
 
 const cardsContainer = document.getElementById("appointment-cards");
 const editor = document.getElementById("appointment-editor");
@@ -19,6 +21,7 @@ const editorTime = document.getElementById("editor-time");
 const editorFeedback = document.getElementById("editor-feedback");
 const duplicateButton = document.getElementById("duplicate-appointment");
 const cancelButton = document.getElementById("cancel-appointment");
+const deleteButton = document.getElementById("delete-appointment");
 const searchInput = document.getElementById("appointment-search");
 const statusFilter = document.getElementById("status-filter");
 const dateFilter = document.getElementById("date-filter");
@@ -26,6 +29,8 @@ const metrics = document.getElementById("appointments-metrics");
 const toast = document.getElementById("site-toast");
 const logoutButton = document.getElementById("logout-button");
 const sessionBadge = document.getElementById("session-badge");
+const availabilityBoard = document.getElementById("availability-board");
+const usersBoard = document.getElementById("users-board");
 
 let selectedId = "";
 let appointments = [];
@@ -142,6 +147,8 @@ function populateDateOptions(selectedDate = "") {
 }
 
 function populateDateFilter() {
+  dateFilter.innerHTML = '<option value="">Todas as datas</option>';
+
   Object.keys(availability).forEach((date) => {
     const option = document.createElement("option");
     option.value = date;
@@ -151,7 +158,9 @@ function populateDateFilter() {
 }
 
 function populateTimeOptions(date, selectedTime = "") {
-  const slots = [...(availability[date] || [])];
+  const slots = [...(availability[date] || [])]
+    .filter((slot) => slot.isAvailable || slot.time === selectedTime)
+    .map((slot) => slot.time || slot);
 
   if (selectedTime && !slots.includes(selectedTime)) {
     slots.unshift(selectedTime);
@@ -163,6 +172,181 @@ function populateTimeOptions(date, selectedTime = "") {
 
   if (selectedTime) {
     editorTime.value = selectedTime;
+  }
+}
+
+async function loadAvailability() {
+  const result = await requestJson("/api/availability");
+  availabilityGroups = result.availability || [];
+  availability = {};
+
+  availabilityGroups.forEach((dateGroup) => {
+    availability[dateGroup.date] = dateGroup.slots || [];
+  });
+
+  populateDateOptions(editorDate.value);
+  populateDateFilter();
+  populateTimeOptions(editorDate.value || Object.keys(availability)[0]);
+  renderAvailability();
+}
+
+function renderAvailability() {
+  if (!availabilityBoard) {
+    return;
+  }
+
+  if (!availabilityGroups.length) {
+    availabilityBoard.innerHTML = "<div class='empty-state'>Nenhum horario encontrado.</div>";
+    return;
+  }
+
+  availabilityBoard.innerHTML = availabilityGroups
+    .map((dateGroup) => `
+      <section class="availability-day">
+        <h3>${escapeHtml(dateGroup.date)}</h3>
+        <div class="availability-slots">
+          ${(dateGroup.slots || []).map((slot) => `
+            <button
+              class="availability-slot ${slot.isAvailable ? "is-free" : "is-blocked"}"
+              type="button"
+              data-date="${escapeHtml(dateGroup.date)}"
+              data-time="${escapeHtml(slot.time)}"
+              aria-pressed="${slot.isAvailable ? "true" : "false"}"
+            >
+              <strong>${escapeHtml(slot.time)}</strong>
+              <span>${slot.isAvailable ? "Livre" : "Bloqueado"}</span>
+            </button>
+          `).join("")}
+        </div>
+      </section>
+    `)
+    .join("");
+}
+
+async function toggleAvailability(button) {
+  const date = button.dataset.date;
+  const time = button.dataset.time;
+  const isAvailable = button.getAttribute("aria-pressed") !== "true";
+
+  button.disabled = true;
+
+  try {
+    await requestJson("/api/availability", {
+      method: "POST",
+      body: JSON.stringify({ date, time, isAvailable })
+    });
+    await loadAvailability();
+    showToast(isAvailable ? "Horario liberado." : "Horario bloqueado.");
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function loadUsers() {
+  if (!usersBoard) {
+    return;
+  }
+
+  usersBoard.innerHTML = "<div class='empty-state'>Carregando usuarios...</div>";
+
+  try {
+    const result = await requestJson("/api/users");
+    users = result.users || [];
+    renderUsers();
+  } catch (error) {
+    usersBoard.innerHTML = `<div class="empty-state">${escapeHtml(error.message)}</div>`;
+  }
+}
+
+function renderUsers() {
+  if (!users.length) {
+    usersBoard.innerHTML = "<div class='empty-state'>Nenhum usuario cadastrado.</div>";
+    return;
+  }
+
+  usersBoard.innerHTML = users
+    .map((user) => `
+      <form class="user-card" data-id="${escapeHtml(user.id)}">
+        <div class="user-card-header">
+          <strong>${escapeHtml(user.name)}</strong>
+          <span>${Number(user.appointmentCount || 0)} agendamentos</span>
+        </div>
+        <label>
+          Nome
+          <input type="text" name="name" value="${escapeHtml(user.name)}" required>
+        </label>
+        <label>
+          Telefone
+          <input type="tel" name="phone" value="${escapeHtml(user.phone)}" required>
+        </label>
+        <label>
+          WhatsApp
+          <input type="tel" name="whatsapp" value="${escapeHtml(user.whatsapp || user.phone)}" required>
+        </label>
+        <div class="user-actions">
+          <button class="secondary-button" type="submit">Salvar usuario</button>
+          <button class="danger-button delete-user-button" type="button" data-id="${escapeHtml(user.id)}">Excluir usuario</button>
+        </div>
+        <p class="editor-feedback" role="status"></p>
+      </form>
+    `)
+    .join("");
+}
+
+async function updateUser(event) {
+  event.preventDefault();
+
+  const form = event.target.closest(".user-card");
+  const feedback = form.querySelector(".editor-feedback");
+  const formData = new FormData(form);
+  const payload = {
+    name: formData.get("name").toString().trim(),
+    phone: formData.get("phone").toString().trim(),
+    whatsapp: formData.get("whatsapp").toString().trim()
+  };
+
+  try {
+    feedback.textContent = "Salvando usuario...";
+    const result = await requestJson(`/api/users/${form.dataset.id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload)
+    });
+    const index = users.findIndex((user) => String(user.id) === String(result.user.id));
+
+    if (index >= 0) {
+      users[index] = result.user;
+    }
+
+    renderUsers();
+    showToast("Usuario atualizado.");
+  } catch (error) {
+    feedback.textContent = error.message;
+    showToast(error.message);
+  }
+}
+
+async function deleteUser(button) {
+  const form = button.closest(".user-card");
+  const user = users.find((item) => String(item.id) === String(button.dataset.id));
+  const feedback = form.querySelector(".editor-feedback");
+  const name = user?.name || "este usuario";
+
+  if (!window.confirm(`Excluir ${name}? Todos os agendamentos deste usuario tambem serao removidos.`)) {
+    return;
+  }
+
+  try {
+    feedback.textContent = "Excluindo usuario...";
+    await requestJson(`/api/users/${button.dataset.id}`, { method: "DELETE" });
+    users = users.filter((item) => String(item.id) !== String(button.dataset.id));
+    renderUsers();
+    await loadAppointments();
+    showToast("Usuario excluido.");
+  } catch (error) {
+    feedback.textContent = error.message;
+    showToast(error.message);
   }
 }
 
@@ -279,13 +463,14 @@ function setEditorDisabled(isDisabled) {
   });
   duplicateButton.disabled = isDisabled;
   cancelButton.disabled = isDisabled;
+  deleteButton.disabled = isDisabled;
 }
 
 function resetEditor() {
   selectedId = "";
   editor.reset();
   populateDateOptions();
-  populateTimeOptions(Object.keys(availability)[0]);
+  populateTimeOptions(Object.keys(availability)[0] || "");
   editorTitle.textContent = "Selecione um agendamento";
   editorFeedback.textContent = "";
   setEditorDisabled(true);
@@ -309,6 +494,7 @@ function fillEditor(appointment) {
   editorFeedback.textContent = "";
   setEditorDisabled(false);
   cancelButton.disabled = appointment.status === "Cancelado";
+  deleteButton.disabled = false;
   renderAppointments();
 }
 
@@ -406,6 +592,34 @@ async function cancelAppointment() {
   }
 }
 
+async function deleteAppointment() {
+  if (!selectedId) {
+    editorFeedback.textContent = "Selecione um agendamento para excluir.";
+    return;
+  }
+
+  const current = appointments.find((appointment) => appointment.id === selectedId);
+  const label = current ? `${current.service} de ${current.name}` : "este agendamento";
+
+  if (!window.confirm(`Excluir ${label}? Esta acao nao pode ser desfeita.`)) {
+    return;
+  }
+
+  try {
+    editorFeedback.textContent = "Excluindo agendamento...";
+    await requestJson(`/api/appointments/${selectedId}`, { method: "DELETE" });
+    appointments = appointments.filter((appointment) => appointment.id !== selectedId);
+    selectedId = "";
+    renderAppointments();
+    resetEditor();
+    await loadUsers();
+    showToast("Agendamento excluido.");
+  } catch (error) {
+    editorFeedback.textContent = error.message;
+    showToast(error.message);
+  }
+}
+
 function selectCard(card) {
   const appointment = appointments.find((item) => item.id === card.dataset.id);
 
@@ -450,18 +664,33 @@ searchInput.addEventListener("input", () => {
 editor.addEventListener("submit", updateAppointment);
 duplicateButton.addEventListener("click", duplicateAppointment);
 cancelButton.addEventListener("click", cancelAppointment);
+deleteButton.addEventListener("click", deleteAppointment);
+availabilityBoard.addEventListener("click", (event) => {
+  const button = event.target.closest(".availability-slot");
+
+  if (button) {
+    toggleAvailability(button);
+  }
+});
+usersBoard.addEventListener("submit", updateUser);
+usersBoard.addEventListener("click", (event) => {
+  const button = event.target.closest(".delete-user-button");
+
+  if (button) {
+    deleteUser(button);
+  }
+});
 logoutButton.addEventListener("click", async () => {
   await requestJson("/api/auth/logout", { method: "POST" });
   window.location.href = "admin-login.html";
 });
 
-populateDateOptions();
-populateDateFilter();
-populateTimeOptions(Object.keys(availability)[0]);
 resetEditor();
 
-loadSession().then((isAuthenticated) => {
+loadSession().then(async (isAuthenticated) => {
   if (isAuthenticated) {
+    await loadAvailability();
     loadAppointments();
+    loadUsers();
   }
 });

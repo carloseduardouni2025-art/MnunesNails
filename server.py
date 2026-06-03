@@ -10,18 +10,35 @@ import re
 import secrets
 import sqlite3
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 
 ROOT = Path(__file__).resolve().parent
 DB_PATH = ROOT / "mnunesnails.db"
 SESSION_COOKIE = "mnunes_session"
+SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30
 ALLOWED_STATUS = {"Confirmado", "Alterado", "Pendente", "Cancelado"}
 PASSWORD_ITERATIONS = 180_000
 DEFAULT_ADMIN = {
     "name": "Administrador",
     "phone": "00000000000",
     "password": "admin123",
+}
+DEFAULT_DAILY_SLOTS = {
+    0: ["08:00", "09:30", "11:00", "14:00", "15:30", "17:00"],
+    1: ["08:30", "10:00", "13:00", "14:30", "16:00", "18:00"],
+    2: ["09:00", "10:30", "12:00", "15:00", "16:30"],
+    3: ["08:00", "09:00", "11:30", "13:30", "17:30"],
+    4: ["08:00", "10:00", "12:30", "14:00", "16:00", "18:30"],
+    5: ["09:00", "10:00", "11:00", "13:00", "14:00"],
+}
+WEEKDAYS_PT = {
+    0: "Segunda-feira",
+    1: "Terca-feira",
+    2: "Quarta-feira",
+    3: "Quinta-feira",
+    4: "Sexta-feira",
+    5: "Sabado",
 }
 
 
@@ -126,6 +143,16 @@ def init_database():
               created_at TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS availability_slots (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              date_label TEXT NOT NULL,
+              appointment_time TEXT NOT NULL,
+              is_available INTEGER NOT NULL DEFAULT 1,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL,
+              UNIQUE(date_label, appointment_time)
+            );
+
             CREATE INDEX IF NOT EXISTS idx_appointments_user_id
               ON appointments(user_id);
 
@@ -140,6 +167,7 @@ def init_database():
         ensure_column(connection, "users", "password_salt", "password_salt TEXT")
         ensure_column(connection, "users", "password_hash", "password_hash TEXT")
         ensure_default_admin(connection)
+        ensure_availability_window(connection)
 
 
 def ensure_default_admin(connection):
@@ -176,6 +204,7 @@ def row_to_user(row):
         "name": row["name"],
         "phone": row["phone"],
         "whatsapp": row["whatsapp"] if "whatsapp" in row.keys() else "",
+        "appointmentCount": row["appointment_count"] if "appointment_count" in row.keys() else 0,
         "createdAt": row["created_at"],
         "updatedAt": row["updated_at"],
     }
@@ -203,6 +232,53 @@ def row_to_appointment(row):
         "time": row["appointment_time"],
         "notes": row["notes"],
         "status": row["status"],
+        "createdAt": row["created_at"],
+        "updatedAt": row["updated_at"],
+    }
+
+
+def date_label_for(day):
+    weekday = WEEKDAYS_PT[day.weekday()]
+    return f"{weekday}, {day.strftime('%d/%m')}"
+
+
+def upcoming_default_availability():
+    dates = {}
+    cursor = datetime.now().date()
+
+    while len(dates) < 6:
+        slots = DEFAULT_DAILY_SLOTS.get(cursor.weekday())
+
+        if slots:
+            dates[date_label_for(cursor)] = slots
+
+        cursor += timedelta(days=1)
+
+    return dates
+
+
+def ensure_availability_window(connection):
+    timestamp = now_iso()
+
+    for date_label, slots in upcoming_default_availability().items():
+        for appointment_time in slots:
+            connection.execute(
+                """
+                INSERT OR IGNORE INTO availability_slots (
+                  date_label, appointment_time, is_available, created_at, updated_at
+                )
+                VALUES (?, ?, 1, ?, ?)
+                """,
+                (date_label, appointment_time, timestamp, timestamp),
+            )
+
+
+def row_to_availability_slot(row):
+    return {
+        "id": row["id"],
+        "date": row["date_label"],
+        "time": row["appointment_time"],
+        "isAvailable": bool(row["is_available"]),
         "createdAt": row["created_at"],
         "updatedAt": row["updated_at"],
     }
@@ -271,6 +347,23 @@ def validate_appointment_details(payload):
         "notes": notes,
         "status": status,
     }
+
+
+def validate_availability_payload(payload):
+    date_label = str(payload.get("date", "")).strip()
+    appointment_time = str(payload.get("time", "")).strip()
+    is_available = bool(payload.get("isAvailable"))
+
+    if not date_label:
+        raise ValueError("Informe o dia.")
+
+    if not appointment_time:
+        raise ValueError("Informe o horario.")
+
+    if not re.fullmatch(r"\d{2}:\d{2}", appointment_time):
+        raise ValueError("Informe o horario no formato HH:MM.")
+
+    return date_label, appointment_time, is_available
 
 
 def find_user_by_phone(connection, phone_normalized):
@@ -366,8 +459,8 @@ def register_user(payload):
     with get_connection() as connection:
         existing = find_user_by_phone(connection, phone_normalized)
 
-        if existing and existing["password_hash"]:
-            raise ValueError("Este telefone ja possui acesso. Use entrar.")
+        if existing:
+            raise ValueError("Este telefone ja esta cadastrado. Use entrar.")
 
         user_id = upsert_user(connection, name, phone, phone_normalized, whatsapp)
         set_user_password(connection, user_id, password)
@@ -458,9 +551,140 @@ def get_user_session(token):
 def list_users():
     with get_connection() as connection:
         rows = connection.execute(
-            "SELECT * FROM users ORDER BY updated_at DESC, id DESC"
+            """
+            SELECT
+              users.*,
+              COUNT(appointments.id) AS appointment_count
+            FROM users
+            LEFT JOIN appointments ON appointments.user_id = users.id
+            GROUP BY users.id
+            ORDER BY users.updated_at DESC, users.id DESC
+            """
         ).fetchall()
     return [row_to_user(row) for row in rows]
+
+
+def update_user(user_id, payload):
+    name, phone, phone_normalized = validate_user_payload(payload)
+    whatsapp = str(payload.get("whatsapp", phone)).strip() or phone
+
+    with get_connection() as connection:
+        current = find_user_by_id(connection, user_id)
+
+        if current is None:
+            return None
+
+        existing_owner = find_user_by_phone(connection, phone_normalized)
+
+        if existing_owner and existing_owner["id"] != user_id:
+            raise ValueError("Este telefone ja esta vinculado a outro usuario.")
+
+        connection.execute(
+            """
+            UPDATE users
+               SET name = ?,
+                   phone = ?,
+                   phone_normalized = ?,
+                   whatsapp = ?,
+                   updated_at = ?
+             WHERE id = ?
+            """,
+            (name, phone, phone_normalized, whatsapp, now_iso(), user_id),
+        )
+
+    with get_connection() as connection:
+        row = connection.execute(
+            """
+            SELECT
+              users.*,
+              COUNT(appointments.id) AS appointment_count
+            FROM users
+            LEFT JOIN appointments ON appointments.user_id = users.id
+            WHERE users.id = ?
+            GROUP BY users.id
+            """,
+            (user_id,),
+        ).fetchone()
+
+    return row_to_user(row)
+
+
+def delete_user(user_id):
+    with get_connection() as connection:
+        current = find_user_by_id(connection, user_id)
+
+        if current is None:
+            return False
+
+        connection.execute("DELETE FROM users WHERE id = ?", (user_id,))
+
+    return True
+
+
+def list_availability():
+    with get_connection() as connection:
+        ensure_availability_window(connection)
+        rows = connection.execute(
+            """
+            SELECT *
+            FROM availability_slots
+            ORDER BY id ASC
+            """
+        ).fetchall()
+
+    slots = [row_to_availability_slot(row) for row in rows]
+    dates = []
+
+    for slot in slots:
+        date_group = next((item for item in dates if item["date"] == slot["date"]), None)
+
+        if not date_group:
+            date_group = {"date": slot["date"], "slots": []}
+            dates.append(date_group)
+
+        date_group["slots"].append(
+            {
+                "time": slot["time"],
+                "isAvailable": slot["isAvailable"],
+            }
+        )
+
+    return dates
+
+
+def set_availability(payload):
+    date_label, appointment_time, is_available = validate_availability_payload(payload)
+    timestamp = now_iso()
+
+    with get_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO availability_slots (
+              date_label, appointment_time, is_available, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(date_label, appointment_time)
+            DO UPDATE SET
+              is_available = excluded.is_available,
+              updated_at = excluded.updated_at
+            """,
+            (date_label, appointment_time, 1 if is_available else 0, timestamp, timestamp),
+        )
+
+    return {"date": date_label, "time": appointment_time, "isAvailable": is_available}
+
+
+def is_slot_available(connection, date_label, appointment_time):
+    ensure_availability_window(connection)
+    row = connection.execute(
+        """
+        SELECT is_available
+        FROM availability_slots
+        WHERE date_label = ? AND appointment_time = ?
+        """,
+        (date_label, appointment_time),
+    ).fetchone()
+    return bool(row and row["is_available"])
 
 
 def list_appointments(session, filters=None):
@@ -560,6 +784,11 @@ def resolve_appointment_user(connection, payload, session=None, current_user_id=
     if current_user_id and session and session["role"] == "user":
         return current_user_id
 
+    existing = find_user_by_phone(connection, phone_normalized)
+
+    if existing and not session:
+        raise ValueError("Este telefone ja esta cadastrado. Entre na sua conta para agendar.")
+
     return upsert_user(connection, name, phone, phone_normalized)
 
 
@@ -569,6 +798,9 @@ def create_appointment(payload, session=None):
     timestamp = now_iso()
 
     with get_connection() as connection:
+        if not is_slot_available(connection, details["date"], details["time"]):
+            raise ValueError("Este horario nao esta livre.")
+
         user_id = resolve_appointment_user(connection, payload, session=session)
         connection.execute(
             """
@@ -605,6 +837,9 @@ def update_appointment(appointment_id, payload, session):
     timestamp = now_iso()
 
     with get_connection() as connection:
+        if details["status"] != "Cancelado" and not is_slot_available(connection, details["date"], details["time"]):
+            raise ValueError("Este horario nao esta livre.")
+
         user_id = resolve_appointment_user(
             connection,
             payload,
@@ -680,6 +915,20 @@ def cancel_appointment(appointment_id, session):
     return get_appointment(appointment_id)
 
 
+def delete_appointment(appointment_id, session):
+    current = get_appointment(appointment_id)
+
+    if current is None:
+        return False
+
+    assert_can_access_appointment(session, current)
+
+    with get_connection() as connection:
+        connection.execute("DELETE FROM appointments WHERE id = ?", (appointment_id,))
+
+    return True
+
+
 class MnunesHandler(SimpleHTTPRequestHandler):
     server_version = "MnunesNailsHTTP/1.0"
 
@@ -689,7 +938,7 @@ class MnunesHandler(SimpleHTTPRequestHandler):
 
     def do_OPTIONS(self):
         self.send_response(204)
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
 
@@ -707,6 +956,10 @@ class MnunesHandler(SimpleHTTPRequestHandler):
                 return
 
             self.send_json({"users": list_users()})
+            return
+
+        if parsed.path == "/api/availability":
+            self.send_json({"availability": list_availability()})
             return
 
         if parsed.path == "/api/appointments":
@@ -752,6 +1005,20 @@ class MnunesHandler(SimpleHTTPRequestHandler):
                 self.send_json({"error": str(error)}, status=400)
             return
 
+        if parsed.path == "/api/availability":
+            session = self.require_session("admin")
+            if session is None:
+                return
+
+            try:
+                slot = set_availability(self.read_json())
+            except ValueError as error:
+                self.send_json({"error": str(error)}, status=400)
+                return
+
+            self.send_json({"slot": slot})
+            return
+
         match = re.fullmatch(r"/api/appointments/([^/]+)/duplicate", parsed.path)
         if match:
             session = self.require_session()
@@ -794,6 +1061,26 @@ class MnunesHandler(SimpleHTTPRequestHandler):
 
     def do_PUT(self):
         parsed = urlparse(self.path)
+        user_match = re.fullmatch(r"/api/users/(\d+)", parsed.path)
+
+        if user_match:
+            session = self.require_session("admin")
+            if session is None:
+                return
+
+            try:
+                user = update_user(int(user_match.group(1)), self.read_json())
+            except ValueError as error:
+                self.send_json({"error": str(error)}, status=400)
+                return
+
+            if user is None:
+                self.send_json({"error": "Usuario nao encontrado."}, status=404)
+                return
+
+            self.send_json({"user": user})
+            return
+
         match = re.fullmatch(r"/api/appointments/([^/]+)", parsed.path)
 
         if not match:
@@ -818,6 +1105,44 @@ class MnunesHandler(SimpleHTTPRequestHandler):
             return
 
         self.send_json({"appointment": appointment})
+
+    def do_DELETE(self):
+        parsed = urlparse(self.path)
+        user_match = re.fullmatch(r"/api/users/(\d+)", parsed.path)
+
+        if user_match:
+            session = self.require_session("admin")
+            if session is None:
+                return
+
+            if not delete_user(int(user_match.group(1))):
+                self.send_json({"error": "Usuario nao encontrado."}, status=404)
+                return
+
+            self.send_json({"ok": True})
+            return
+
+        appointment_match = re.fullmatch(r"/api/appointments/([^/]+)", parsed.path)
+
+        if appointment_match:
+            session = self.require_session("admin")
+            if session is None:
+                return
+
+            try:
+                was_deleted = delete_appointment(appointment_match.group(1), session)
+            except ForbiddenError as error:
+                self.send_json({"error": str(error)}, status=403)
+                return
+
+            if not was_deleted:
+                self.send_json({"error": "Agendamento nao encontrado."}, status=404)
+                return
+
+            self.send_json({"ok": True})
+            return
+
+        self.send_json({"error": "Rota nao encontrada."}, status=404)
 
     def handle_auth(self, auth_function):
         try:
@@ -884,7 +1209,7 @@ class MnunesHandler(SimpleHTTPRequestHandler):
         self.wfile.write(body)
 
     def session_cookie(self, token):
-        return f"{SESSION_COOKIE}={token}; Path=/; HttpOnly; SameSite=Lax"
+        return f"{SESSION_COOKIE}={token}; Path=/; Max-Age={SESSION_MAX_AGE_SECONDS}; HttpOnly; SameSite=Lax"
 
     def clear_session_cookie(self):
         return f"{SESSION_COOKIE}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax"

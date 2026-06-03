@@ -17,49 +17,46 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div class="page-shell">
-    <header class="topbar">
-      <div class="brand">
-        <div class="brand-mark">MN</div>
-        <div>
-          <p class="eyebrow">Studio MNunesnails</p>
-          <h1>Acesso administrativo</h1>
+  <header class="auth-topbar auth-topbar-admin">
+    <a class="auth-home-link" href="index.html" aria-label="Voltar para a página inicial">
+      <span class="auth-home-mark">MN</span>
+      <span>MNunesnails</span>
+    </a>
+  </header>
+
+  <main class="auth-page auth-page-compact">
+    <section class="auth-grid auth-grid-single">
+      <form class="auth-card auth-card-compact auth-card-admin card" id="admin-login-form">
+        <div class="auth-card-header">
+          <span class="admin-auth-badge">Acesso restrito</span>
+          <h1>Área administrativa</h1>
+          <p>Entre para gerenciar horários, usuários e agendamentos.</p>
         </div>
-      </div>
-      <nav class="top-actions" aria-label="Navegacao principal">
-        <a class="ghost-button" href="index.html">Inicio</a>
-      </nav>
-    </header>
 
-    <main class="auth-page">
-      <section class="auth-hero card">
-        <span class="badge">Acesso restrito</span>
-        <h2>Entre para administrar a agenda do studio.</h2>
-      </section>
+        <div class="auth-divider"><span>admin</span></div>
 
-      <section class="auth-grid auth-grid-single">
-        <form class="auth-card card" id="admin-login-form">
-          <div>
-            <p class="eyebrow">Administrador</p>
-            <h2>Agenda geral</h2>
-          </div>
+        <label>
+          Celular administrativo
+          <input type="tel" name="phone" placeholder="Telefone de acesso" required autofocus>
+        </label>
 
-          <label>
-            Celular
-            <input type="tel" name="phone" placeholder="Telefone de acesso" required>
-          </label>
-
-          <label>
-            Senha
+        <label>
+          Informe sua senha
+          <span class="password-field">
             <input type="password" name="password" placeholder="Senha administrativa" required>
-          </label>
+            <button class="password-toggle" type="button" data-password-toggle aria-label="Mostrar senha">Ver</button>
+          </span>
+        </label>
 
-          <button class="primary-button" type="submit">Entrar como admin</button>
-          <p class="editor-feedback" id="admin-login-feedback" role="status"></p>
-        </form>
-      </section>
-    </main>
-  </div>
+        <a class="auth-forgot-link" href="index.html">Voltar para a página inicial</a>
+
+        <button class="primary-button auth-submit" type="submit">Entrar como admin</button>
+
+        <p class="admin-auth-note">Uso exclusivo da equipe do Studio MNunesnails.</p>
+        <p class="editor-feedback" id="admin-login-feedback" role="status"></p>
+      </form>
+    </section>
+  </main>
 
   <div class="toast" id="site-toast" role="status" aria-live="polite"></div>
   <script src="login.js"></script>

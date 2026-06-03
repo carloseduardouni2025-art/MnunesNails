@@ -10,7 +10,7 @@ const dailySlots = {
 const weekdayFormatter = new Intl.DateTimeFormat("pt-BR", { weekday: "long" });
 const shortDateFormatter = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit" });
 
-const availability = buildAvailability();
+let availability = {};
 
 const form = document.getElementById("booking-form");
 const dateSelect = document.getElementById("date-select");
@@ -27,28 +27,11 @@ const toast = document.getElementById("site-toast");
 let selectedTime = "";
 let lastSavedSignature = "";
 let isSaving = false;
-
-function buildAvailability() {
-  const dates = {};
-  const cursor = new Date();
-  cursor.setHours(0, 0, 0, 0);
-
-  while (Object.keys(dates).length < 6) {
-    const day = cursor.getDay();
-
-    if (dailySlots[day]) {
-      const weekday = weekdayFormatter.format(cursor);
-      const label = `${weekday.charAt(0).toUpperCase()}${weekday.slice(1)}, ${shortDateFormatter.format(cursor)}`;
-      dates[label] = dailySlots[day];
-    }
-
-    cursor.setDate(cursor.getDate() + 1);
-  }
-
-  return dates;
-}
+let currentUser = null;
 
 function populateDates() {
+  dateSelect.innerHTML = '<option value="">Escolha uma data</option>';
+
   Object.keys(availability).forEach((date) => {
     const option = document.createElement("option");
     option.value = date;
@@ -67,15 +50,15 @@ function renderTimeSlots(date) {
     return;
   }
 
-  availability[date].forEach((time, index) => {
+  availability[date].forEach((slot) => {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "time-slot";
-    button.textContent = time;
+    button.textContent = slot.time;
 
-    if (index === availability[date].length - 1 && date.startsWith("Quinta")) {
+    if (!slot.isAvailable) {
       button.disabled = true;
-      button.textContent = `${time} indisponível`;
+      button.textContent = `${slot.time} indisponivel`;
     }
 
     button.addEventListener("click", () => {
@@ -85,7 +68,7 @@ function renderTimeSlots(date) {
 
       document.querySelectorAll(".time-slot").forEach((slot) => slot.classList.remove("active"));
       button.classList.add("active");
-      selectedTime = time;
+      selectedTime = slot.time;
       updateSummary();
     });
 
@@ -93,6 +76,31 @@ function renderTimeSlots(date) {
   });
 
   updateSummary();
+}
+
+async function loadAvailability() {
+  try {
+    const response = await fetch("/api/availability");
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(result.error || "Nao foi possivel carregar os horarios.");
+    }
+
+    availability = {};
+    (result.availability || []).forEach((dateGroup) => {
+      const freeSlots = dateGroup.slots.filter((slot) => slot.isAvailable);
+
+      if (freeSlots.length) {
+        availability[dateGroup.date] = freeSlots;
+      }
+    });
+
+    populateDates();
+    renderTimeSlots("");
+  } catch (error) {
+    timeSlots.innerHTML = `<p class='empty-state'>${error.message}</p>`;
+  }
 }
 
 function showToast(message) {
@@ -106,6 +114,28 @@ function showToast(message) {
   showToast.timeout = window.setTimeout(() => {
     toast.classList.remove("show");
   }, 3200);
+}
+
+async function loadCurrentUser() {
+  try {
+    const response = await fetch("/api/auth/me");
+    const result = await response.json();
+
+    if (!response.ok || !result.authenticated || result.session?.role !== "user") {
+      return;
+    }
+
+    currentUser = result.session.user;
+    form.elements.name.value = currentUser.name || "";
+    form.elements.phone.value = currentUser.whatsapp || currentUser.phone || "";
+    form.elements.name.readOnly = true;
+    form.elements.phone.readOnly = true;
+    form.elements.name.closest("label")?.classList.add("field-prefilled");
+    form.elements.phone.closest("label")?.classList.add("field-prefilled");
+    updateSummary();
+  } catch (error) {
+    currentUser = null;
+  }
 }
 
 function setSavingState(isActive) {
@@ -304,5 +334,5 @@ whatsappLink.addEventListener("click", async (event) => {
   }
 });
 
-populateDates();
-renderTimeSlots("");
+loadAvailability();
+loadCurrentUser();

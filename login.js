@@ -5,6 +5,9 @@ const clientFeedback = document.getElementById("client-login-feedback");
 const clientRegisterFeedback = document.getElementById("client-register-feedback");
 const adminFeedback = document.getElementById("admin-login-feedback");
 const toast = document.getElementById("site-toast");
+const showRegisterButton = document.getElementById("show-register-button");
+const showLoginButton = document.getElementById("show-login-button");
+const passwordToggleButtons = document.querySelectorAll("[data-password-toggle]");
 
 function showToast(message) {
   toast.textContent = message;
@@ -30,6 +33,34 @@ function registerPayload() {
   const payload = formPayload(clientRegisterForm);
   payload.phone = payload.whatsapp;
   return payload;
+}
+
+function showClientRegister() {
+  clientForm.hidden = true;
+  clientRegisterForm.hidden = false;
+  clientRegisterFeedback.textContent = "";
+  clientRegisterForm.querySelector("input")?.focus();
+}
+
+function showClientLogin() {
+  clientRegisterForm.hidden = true;
+  clientForm.hidden = false;
+  clientFeedback.textContent = "";
+  clientForm.querySelector("input")?.focus();
+}
+
+function togglePasswordVisibility(event) {
+  const button = event.currentTarget;
+  const input = button.closest(".password-field")?.querySelector("input");
+
+  if (!input) {
+    return;
+  }
+
+  const shouldShow = input.type === "password";
+  input.type = shouldShow ? "text" : "password";
+  button.textContent = shouldShow ? "Ocultar" : "Ver";
+  button.setAttribute("aria-label", shouldShow ? "Ocultar senha" : "Mostrar senha");
 }
 
 async function requestJson(url, payload) {
@@ -98,6 +129,18 @@ if (clientForm) {
 if (clientRegisterForm) {
   clientRegisterForm.addEventListener("submit", submitClientRegister);
 }
+
+if (showRegisterButton && clientForm && clientRegisterForm) {
+  showRegisterButton.addEventListener("click", showClientRegister);
+}
+
+if (showLoginButton && clientForm && clientRegisterForm) {
+  showLoginButton.addEventListener("click", showClientLogin);
+}
+
+passwordToggleButtons.forEach((button) => {
+  button.addEventListener("click", togglePasswordVisibility);
+});
 
 if (adminForm) {
   adminForm.addEventListener("submit", submitAdminLogin);
