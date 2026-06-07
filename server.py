@@ -6,6 +6,7 @@ import hashlib
 import hmac
 import json
 import mimetypes
+import os
 import re
 import secrets
 import sqlite3
@@ -1246,8 +1247,10 @@ class MnunesHandler(SimpleHTTPRequestHandler):
 
 def main():
     init_database()
-    server = ThreadingHTTPServer(("127.0.0.1", 5500), MnunesHandler)
-    print("Servidor em http://localhost:5500/")
+    host = "0.0.0.0"
+    port = int(os.environ.get("PORT", "5500"))
+    server = ThreadingHTTPServer((host, port), MnunesHandler)
+    print(f"Servidor em http://{host}:{port}/")
     print(f"Banco de dados em {DB_PATH}")
     server.serve_forever()
 
