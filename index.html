@@ -47,16 +47,7 @@
           </div>
           <div class="hero-stats">
             <div>
-              <strong>+480</strong>
-              <span>agendamentos concluídos</span>
-            </div>
-            <div>
-              <strong>4,9/5</strong>
-              <span>avaliação média</span>
-            </div>
-            <div>
-              <strong>Seg-Sáb</strong>
-              <span>08h às 19h</span>
+              <span>Segunda a S&aacute;bado &middot; 8h &agrave;s 19h</span>
             </div>
           </div>
         </div>
@@ -116,7 +107,7 @@
           <p class="eyebrow">Serviços</p>
           <h2>Monte sua experiência no salão</h2>
         </div>
-        <div class="service-grid">
+        <div class="service-grid" id="service-grid">
           <article class="service-card featured" data-service="Manicure clássica">
             <p class="service-tag">Mais pedido</p>
             <h3>Manicure clássica</h3>
@@ -211,7 +202,10 @@
             </label>
             <label>
               Dia
-              <select name="date" id="date-select" required>
+              <button class="date-picker-trigger" type="button" id="date-picker-trigger">
+                Escolha uma data
+              </button>
+              <select name="date" id="date-select" class="visually-hidden-select" tabindex="-1" aria-hidden="true">
                 <option value="">Escolha o dia</option>
               </select>
             </label>
@@ -249,18 +243,6 @@
         </div>
       </section>
 
-      <section class="testimonials">
-        <div class="section-heading">
-          <p class="eyebrow">Avaliações</p>
-          <h2>O que as clientes dizem</h2>
-        </div>
-        <div class="testimonial-grid">
-          <article class="card">
-            <p>Atendimento cuidadoso, pontual e com acabamento impecável. Já saí com o próximo horário reservado.</p>
-            <strong>Mariana S.</strong>
-          </article>
-        </div>
-      </section>
     </main>
   </div>
 

@@ -25,14 +25,55 @@ DEFAULT_ADMIN = {
     "phone": "00000000000",
     "password": "admin123",
 }
-DEFAULT_DAILY_SLOTS = {
-    0: ["08:00", "09:30", "11:00", "14:00", "15:30", "17:00"],
-    1: ["08:30", "10:00", "13:00", "14:30", "16:00", "18:00"],
-    2: ["09:00", "10:30", "12:00", "15:00", "16:30"],
-    3: ["08:00", "09:00", "11:30", "13:30", "17:30"],
-    4: ["08:00", "10:00", "12:30", "14:00", "16:00", "18:30"],
-    5: ["09:00", "10:00", "11:00", "13:00", "14:00"],
-}
+DEFAULT_SERVICES = [
+    {
+        "name": "Manicure cl\u00e1ssica",
+        "legacy_name": "Manicure classica",
+        "description": "Cutilagem cuidadosa, esmalta\u00e7\u00e3o tradicional e finaliza\u00e7\u00e3o brilhante.",
+        "price": "R$ 35",
+        "duration": "45 min",
+    },
+    {
+        "name": "Banho em gel",
+        "description": "Refor\u00e7o e prote\u00e7\u00e3o para unhas naturais com acabamento elegante.",
+        "price": "R$ 55",
+        "duration": "60 min",
+    },
+    {
+        "name": "Esmalta\u00e7\u00e3o em gel",
+        "legacy_name": "Esmaltacao em gel",
+        "description": "Durabilidade prolongada com brilho intenso e secagem r\u00e1pida.",
+        "price": "R$ 65",
+        "duration": "70 min",
+    },
+    {
+        "name": "Spa das m\u00e3os",
+        "legacy_name": "Spa das maos",
+        "description": "Esfolia\u00e7\u00e3o, hidrata\u00e7\u00e3o profunda e massagem relaxante.",
+        "price": "R$ 50",
+        "duration": "50 min",
+    },
+    {
+        "name": "Blindagem",
+        "description": "Camada protetora que ajuda a evitar quebras e melhora a resist\u00eancia.",
+        "price": "R$ 60",
+        "duration": "70 min",
+    },
+    {
+        "name": "Pacote premium",
+        "description": "Manicure, spa das m\u00e3os e nail art delicada em uma \u00fanica reserva.",
+        "price": "R$ 95",
+        "duration": "90 min",
+    },
+]
+DEFAULT_DAY_SLOTS = [
+    f"{hour:02d}:{minute:02d}"
+    for hour in range(8, 19)
+    for minute in (0, 30)
+    if hour < 18 or minute == 0
+]
+WORKDAY_START_MINUTES = 8 * 60
+WORKDAY_END_MINUTES = 18 * 60
 WEEKDAYS_PT = {
     0: "Segunda-feira",
     1: "Terca-feira",
@@ -40,6 +81,7 @@ WEEKDAYS_PT = {
     3: "Quinta-feira",
     4: "Sexta-feira",
     5: "Sabado",
+    6: "Domingo",
 }
 
 
@@ -154,6 +196,17 @@ def init_database():
               UNIQUE(date_label, appointment_time)
             );
 
+            CREATE TABLE IF NOT EXISTS services (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              name TEXT NOT NULL UNIQUE,
+              description TEXT NOT NULL DEFAULT '',
+              price TEXT NOT NULL DEFAULT '',
+              duration TEXT NOT NULL DEFAULT '',
+              is_active INTEGER NOT NULL DEFAULT 1,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            );
+
             CREATE INDEX IF NOT EXISTS idx_appointments_user_id
               ON appointments(user_id);
 
@@ -168,6 +221,7 @@ def init_database():
         ensure_column(connection, "users", "password_salt", "password_salt TEXT")
         ensure_column(connection, "users", "password_hash", "password_hash TEXT")
         ensure_default_admin(connection)
+        ensure_default_services(connection)
         ensure_availability_window(connection)
 
 
@@ -197,6 +251,64 @@ def ensure_default_admin(connection):
             timestamp,
         ),
     )
+
+
+def ensure_default_services(connection):
+    timestamp = now_iso()
+
+    for service in DEFAULT_SERVICES:
+        legacy_name = service.get("legacy_name", service["name"])
+        existing_current = connection.execute(
+            "SELECT id FROM services WHERE name = ? LIMIT 1",
+            (service["name"],),
+        ).fetchone()
+
+        if existing_current:
+            continue
+
+        existing_legacy = connection.execute(
+            "SELECT id FROM services WHERE name = ? LIMIT 1",
+            (legacy_name,),
+        ).fetchone()
+
+        if existing_legacy:
+            connection.execute(
+                """
+                UPDATE services
+                   SET name = ?,
+                       description = ?,
+                       price = ?,
+                       duration = ?,
+                       updated_at = ?
+                 WHERE id = ?
+                """,
+                (
+                    service["name"],
+                    service["description"],
+                    service["price"],
+                    service["duration"],
+                    timestamp,
+                    existing_legacy["id"],
+                ),
+            )
+            continue
+
+        connection.execute(
+            """
+            INSERT OR IGNORE INTO services (
+              name, description, price, duration, is_active, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, 1, ?, ?)
+            """,
+            (
+                service["name"],
+                service["description"],
+                service["price"],
+                service["duration"],
+                timestamp,
+                timestamp,
+            ),
+        )
 
 
 def row_to_user(row):
@@ -238,21 +350,69 @@ def row_to_appointment(row):
     }
 
 
+def row_to_service(row):
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "description": row["description"],
+        "price": row["price"],
+        "duration": row["duration"],
+        "isActive": bool(row["is_active"]),
+        "appointmentCount": row["appointment_count"] if "appointment_count" in row.keys() else 0,
+        "createdAt": row["created_at"],
+        "updatedAt": row["updated_at"],
+    }
+
+
+def time_to_minutes(time_value):
+    hour, minute = [int(part) for part in str(time_value).split(":", 1)]
+    return hour * 60 + minute
+
+
+def minutes_to_time(minutes):
+    hour = minutes // 60
+    minute = minutes % 60
+    return f"{hour:02d}:{minute:02d}"
+
+
+def is_within_workday(time_value):
+    minutes = time_to_minutes(time_value)
+    return WORKDAY_START_MINUTES <= minutes <= WORKDAY_END_MINUTES
+
+
+def service_duration_minutes(connection, service_name):
+    row = connection.execute(
+        "SELECT duration FROM services WHERE name = ?",
+        (service_name,),
+    ).fetchone()
+    duration_text = row["duration"] if row else ""
+    match = re.search(r"\d+", duration_text or "")
+
+    return int(match.group(0)) if match else 30
+
+
 def date_label_for(day):
     weekday = WEEKDAYS_PT[day.weekday()]
     return f"{weekday}, {day.strftime('%d/%m')}"
 
 
+def availability_sort_key(date_label):
+    try:
+        _, date_part = date_label.split(", ", 1)
+        day, month = [int(part) for part in date_part.split("/")]
+        today = datetime.now().date()
+        return today.replace(month=month, day=day)
+    except (ValueError, TypeError):
+        return datetime.max.date()
+
+
 def upcoming_default_availability():
     dates = {}
     cursor = datetime.now().date()
+    end_date = cursor.replace(month=12, day=31)
 
-    while len(dates) < 6:
-        slots = DEFAULT_DAILY_SLOTS.get(cursor.weekday())
-
-        if slots:
-            dates[date_label_for(cursor)] = slots
-
+    while cursor <= end_date:
+        dates[date_label_for(cursor)] = DEFAULT_DAY_SLOTS
         cursor += timedelta(days=1)
 
     return dates
@@ -365,6 +525,44 @@ def validate_availability_payload(payload):
         raise ValueError("Informe o horario no formato HH:MM.")
 
     return date_label, appointment_time, is_available
+
+
+def validate_availability_day_payload(payload):
+    date_label = str(payload.get("date", "")).strip()
+    is_available = bool(payload.get("isAvailable"))
+
+    if not date_label:
+        raise ValueError("Informe o dia.")
+
+    return date_label, is_available
+
+
+def validate_service_payload(payload, require_name=True):
+    name = str(payload.get("name", "")).strip()
+    description = str(payload.get("description", "")).strip()
+    price = str(payload.get("price", "")).strip()
+    duration = str(payload.get("duration", "")).strip()
+    is_active = bool(payload.get("isActive", True))
+
+    if require_name and not name:
+        raise ValueError("Informe o nome do servico.")
+
+    price_number = re.search(r"\d+(?:[,.]\d{1,2})?", price)
+    duration_number = re.search(r"\d+", duration)
+
+    if price_number:
+        price = f"R$ {price_number.group(0).replace('.', ',')}"
+
+    if duration_number:
+        duration = f"{duration_number.group(0)} min"
+
+    return {
+        "name": name,
+        "description": description,
+        "price": price,
+        "duration": duration,
+        "isActive": is_active,
+    }
 
 
 def find_user_by_phone(connection, phone_normalized):
@@ -565,6 +763,120 @@ def list_users():
     return [row_to_user(row) for row in rows]
 
 
+def list_services(include_inactive=False):
+    with get_connection() as connection:
+        ensure_default_services(connection)
+        query = """
+            SELECT
+              services.*,
+              COUNT(appointments.id) AS appointment_count
+            FROM services
+            LEFT JOIN appointments
+              ON appointments.service = services.name
+             AND appointments.status != 'Cancelado'
+        """
+
+        if not include_inactive:
+            query += " WHERE services.is_active = 1"
+
+        query += " GROUP BY services.id ORDER BY services.id ASC"
+        rows = connection.execute(query).fetchall()
+
+    return [row_to_service(row) for row in rows]
+
+
+def get_service(service_id):
+    with get_connection() as connection:
+        row = connection.execute(
+            "SELECT * FROM services WHERE id = ?",
+            (service_id,),
+        ).fetchone()
+
+    return row_to_service(row) if row else None
+
+
+def create_service(payload):
+    data = validate_service_payload(payload)
+    timestamp = now_iso()
+
+    with get_connection() as connection:
+        try:
+            cursor = connection.execute(
+                """
+                INSERT INTO services (
+                  name, description, price, duration, is_active, created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    data["name"],
+                    data["description"],
+                    data["price"],
+                    data["duration"],
+                    1 if data["isActive"] else 0,
+                    timestamp,
+                    timestamp,
+                ),
+            )
+        except sqlite3.IntegrityError:
+            raise ValueError("Ja existe um servico com este nome.")
+
+        service_id = cursor.lastrowid
+
+    return get_service(service_id)
+
+
+def update_service(service_id, payload):
+    current = get_service(service_id)
+
+    if current is None:
+        return None
+
+    data = validate_service_payload(payload, require_name=False)
+    name = data["name"] or current["name"]
+    timestamp = now_iso()
+
+    with get_connection() as connection:
+        try:
+            connection.execute(
+                """
+                UPDATE services
+                   SET name = ?,
+                       description = ?,
+                       price = ?,
+                       duration = ?,
+                       is_active = ?,
+                       updated_at = ?
+                 WHERE id = ?
+                """,
+                (
+                    name,
+                    data["description"],
+                    data["price"],
+                    data["duration"],
+                    1 if data["isActive"] else 0,
+                    timestamp,
+                    service_id,
+                ),
+            )
+        except sqlite3.IntegrityError:
+            raise ValueError("Ja existe um servico com este nome.")
+
+    return get_service(service_id)
+
+
+def delete_service(service_id):
+    with get_connection() as connection:
+        current = get_service(service_id)
+
+        if current is None:
+            return False
+
+        connection.execute("DELETE FROM services WHERE id = ?", (service_id,))
+
+    return True
+
+
 def update_user(user_id, payload):
     name, phone, phone_normalized = validate_user_payload(payload)
     whatsapp = str(payload.get("whatsapp", phone)).strip() or phone
@@ -622,9 +934,31 @@ def delete_user(user_id):
     return True
 
 
+def dynamic_slots_for_date(connection, date_label):
+    rows = connection.execute(
+        """
+        SELECT service, appointment_time
+        FROM appointments
+        WHERE appointment_date = ?
+          AND status != 'Cancelado'
+        """,
+        (date_label,),
+    ).fetchall()
+    slots = set(DEFAULT_DAY_SLOTS)
+
+    for row in rows:
+        appointment_end = time_to_minutes(row["appointment_time"]) + service_duration_minutes(connection, row["service"])
+
+        if WORKDAY_START_MINUTES <= appointment_end <= WORKDAY_END_MINUTES:
+            slots.add(minutes_to_time(appointment_end))
+
+    return sorted(slots, key=time_to_minutes)
+
+
 def list_availability():
     with get_connection() as connection:
         ensure_availability_window(connection)
+        default_dates = upcoming_default_availability()
         rows = connection.execute(
             """
             SELECT *
@@ -632,23 +966,25 @@ def list_availability():
             ORDER BY id ASC
             """
         ).fetchall()
+        manual_availability = {
+            (row["date_label"], row["appointment_time"]): bool(row["is_available"])
+            for row in rows
+        }
+        dates = []
 
-    slots = [row_to_availability_slot(row) for row in rows]
-    dates = []
+        for date_label in sorted(default_dates.keys(), key=availability_sort_key):
+            date_group = {"date": date_label, "slots": []}
 
-    for slot in slots:
-        date_group = next((item for item in dates if item["date"] == slot["date"]), None)
+            for appointment_time in dynamic_slots_for_date(connection, date_label):
+                is_manual_available = manual_availability.get((date_label, appointment_time), True)
+                date_group["slots"].append(
+                    {
+                        "time": appointment_time,
+                        "isAvailable": is_manual_available and not is_slot_occupied(connection, date_label, appointment_time),
+                    }
+                )
 
-        if not date_group:
-            date_group = {"date": slot["date"], "slots": []}
             dates.append(date_group)
-
-        date_group["slots"].append(
-            {
-                "time": slot["time"],
-                "isAvailable": slot["isAvailable"],
-            }
-        )
 
     return dates
 
@@ -658,6 +994,9 @@ def set_availability(payload):
     timestamp = now_iso()
 
     with get_connection() as connection:
+        if is_available and is_slot_occupied(connection, date_label, appointment_time):
+            raise ValueError("Este horario tem agendamento ativo. Cancele o agendamento para liberar.")
+
         connection.execute(
             """
             INSERT INTO availability_slots (
@@ -675,17 +1014,116 @@ def set_availability(payload):
     return {"date": date_label, "time": appointment_time, "isAvailable": is_available}
 
 
-def is_slot_available(connection, date_label, appointment_time):
-    ensure_availability_window(connection)
-    row = connection.execute(
+def set_day_availability(payload):
+    date_label, is_available = validate_availability_day_payload(payload)
+    timestamp = now_iso()
+
+    with get_connection() as connection:
+        ensure_availability_window(connection)
+
+        for appointment_time in DEFAULT_DAY_SLOTS:
+            slot_is_available = is_available and not is_slot_occupied(connection, date_label, appointment_time)
+            connection.execute(
+                """
+                INSERT INTO availability_slots (
+                  date_label, appointment_time, is_available, created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(date_label, appointment_time)
+                DO UPDATE SET
+                  is_available = excluded.is_available,
+                  updated_at = excluded.updated_at
+                """,
+                (date_label, appointment_time, 1 if slot_is_available else 0, timestamp, timestamp),
+            )
+
+    return {"date": date_label, "isAvailable": is_available}
+
+
+def appointment_blocks_slot(connection, appointment, slot_time):
+    slot_start = time_to_minutes(slot_time)
+    appointment_start = time_to_minutes(appointment["appointment_time"])
+    appointment_end = appointment_start + service_duration_minutes(connection, appointment["service"])
+
+    return appointment_start <= slot_start < appointment_end
+
+
+def is_slot_occupied(connection, date_label, appointment_time, ignored_appointment_id=None):
+    rows = connection.execute(
         """
-        SELECT is_available
-        FROM availability_slots
-        WHERE date_label = ? AND appointment_time = ?
+        SELECT id, service, appointment_time
+        FROM appointments
+        WHERE appointment_date = ?
+          AND status != 'Cancelado'
         """,
-        (date_label, appointment_time),
-    ).fetchone()
-    return bool(row and row["is_available"])
+        (date_label,),
+    ).fetchall()
+
+    return any(
+        row["id"] != ignored_appointment_id and appointment_blocks_slot(connection, row, appointment_time)
+        for row in rows
+    )
+
+
+def appointment_overlaps_existing(connection, date_label, appointment_time, service_name, ignored_appointment_id=None):
+    appointment_start = time_to_minutes(appointment_time)
+    appointment_end = appointment_start + service_duration_minutes(connection, service_name)
+
+    if appointment_end > WORKDAY_END_MINUTES:
+        return True
+
+    rows = connection.execute(
+        """
+        SELECT id, service, appointment_time
+        FROM appointments
+        WHERE appointment_date = ?
+          AND status != 'Cancelado'
+        """,
+        (date_label,),
+    ).fetchall()
+
+    for row in rows:
+        if row["id"] == ignored_appointment_id:
+            continue
+
+        existing_start = time_to_minutes(row["appointment_time"])
+        existing_end = existing_start + service_duration_minutes(connection, row["service"])
+
+        if appointment_start < existing_end and existing_start < appointment_end:
+            return True
+
+    return False
+
+
+def is_slot_available(connection, date_label, appointment_time, service_name=None, ignored_appointment_id=None):
+    ensure_availability_window(connection)
+
+    if date_label not in upcoming_default_availability() or not is_within_workday(appointment_time):
+        return False
+
+    if appointment_time in DEFAULT_DAY_SLOTS:
+        row = connection.execute(
+            """
+            SELECT is_available
+            FROM availability_slots
+            WHERE date_label = ? AND appointment_time = ?
+            """,
+            (date_label, appointment_time),
+        ).fetchone()
+
+        if not row or not row["is_available"]:
+            return False
+
+    if service_name:
+        return not appointment_overlaps_existing(
+            connection,
+            date_label,
+            appointment_time,
+            service_name,
+            ignored_appointment_id=ignored_appointment_id,
+        )
+
+    return not is_slot_occupied(connection, date_label, appointment_time, ignored_appointment_id=ignored_appointment_id)
 
 
 def list_appointments(session, filters=None):
@@ -799,7 +1237,7 @@ def create_appointment(payload, session=None):
     timestamp = now_iso()
 
     with get_connection() as connection:
-        if not is_slot_available(connection, details["date"], details["time"]):
+        if not is_slot_available(connection, details["date"], details["time"], service_name=details["service"]):
             raise ValueError("Este horario nao esta livre.")
 
         user_id = resolve_appointment_user(connection, payload, session=session)
@@ -838,7 +1276,13 @@ def update_appointment(appointment_id, payload, session):
     timestamp = now_iso()
 
     with get_connection() as connection:
-        if details["status"] != "Cancelado" and not is_slot_available(connection, details["date"], details["time"]):
+        if details["status"] != "Cancelado" and not is_slot_available(
+            connection,
+            details["date"],
+            details["time"],
+            service_name=details["service"],
+            ignored_appointment_id=appointment_id,
+        ):
             raise ValueError("Este horario nao esta livre.")
 
         user_id = resolve_appointment_user(
@@ -924,6 +1368,9 @@ def delete_appointment(appointment_id, session):
 
     assert_can_access_appointment(session, current)
 
+    if current["status"] != "Cancelado":
+        raise ValueError("Cancele o agendamento antes de excluir. O horario so e liberado ao cancelar.")
+
     with get_connection() as connection:
         connection.execute("DELETE FROM appointments WHERE id = ?", (appointment_id,))
 
@@ -961,6 +1408,12 @@ class MnunesHandler(SimpleHTTPRequestHandler):
 
         if parsed.path == "/api/availability":
             self.send_json({"availability": list_availability()})
+            return
+
+        if parsed.path == "/api/services":
+            session = self.current_session()
+            include_inactive = bool(session and session["role"] == "admin")
+            self.send_json({"services": list_services(include_inactive=include_inactive)})
             return
 
         if parsed.path == "/api/appointments":
@@ -1020,6 +1473,34 @@ class MnunesHandler(SimpleHTTPRequestHandler):
             self.send_json({"slot": slot})
             return
 
+        if parsed.path == "/api/availability/day":
+            session = self.require_session("admin")
+            if session is None:
+                return
+
+            try:
+                day = set_day_availability(self.read_json())
+            except ValueError as error:
+                self.send_json({"error": str(error)}, status=400)
+                return
+
+            self.send_json({"day": day})
+            return
+
+        if parsed.path == "/api/services":
+            session = self.require_session("admin")
+            if session is None:
+                return
+
+            try:
+                service = create_service(self.read_json())
+            except ValueError as error:
+                self.send_json({"error": str(error)}, status=400)
+                return
+
+            self.send_json({"service": service}, status=201)
+            return
+
         match = re.fullmatch(r"/api/appointments/([^/]+)/duplicate", parsed.path)
         if match:
             session = self.require_session()
@@ -1062,6 +1543,26 @@ class MnunesHandler(SimpleHTTPRequestHandler):
 
     def do_PUT(self):
         parsed = urlparse(self.path)
+        service_match = re.fullmatch(r"/api/services/(\d+)", parsed.path)
+
+        if service_match:
+            session = self.require_session("admin")
+            if session is None:
+                return
+
+            try:
+                service = update_service(int(service_match.group(1)), self.read_json())
+            except ValueError as error:
+                self.send_json({"error": str(error)}, status=400)
+                return
+
+            if service is None:
+                self.send_json({"error": "Servico nao encontrado."}, status=404)
+                return
+
+            self.send_json({"service": service})
+            return
+
         user_match = re.fullmatch(r"/api/users/(\d+)", parsed.path)
 
         if user_match:
@@ -1109,6 +1610,20 @@ class MnunesHandler(SimpleHTTPRequestHandler):
 
     def do_DELETE(self):
         parsed = urlparse(self.path)
+        service_match = re.fullmatch(r"/api/services/(\d+)", parsed.path)
+
+        if service_match:
+            session = self.require_session("admin")
+            if session is None:
+                return
+
+            if not delete_service(int(service_match.group(1))):
+                self.send_json({"error": "Servico nao encontrado."}, status=404)
+                return
+
+            self.send_json({"ok": True})
+            return
+
         user_match = re.fullmatch(r"/api/users/(\d+)", parsed.path)
 
         if user_match:
@@ -1132,6 +1647,9 @@ class MnunesHandler(SimpleHTTPRequestHandler):
 
             try:
                 was_deleted = delete_appointment(appointment_match.group(1), session)
+            except ValueError as error:
+                self.send_json({"error": str(error)}, status=400)
+                return
             except ForbiddenError as error:
                 self.send_json({"error": str(error)}, status=403)
                 return

@@ -14,13 +14,15 @@ let availability = {};
 
 const form = document.getElementById("booking-form");
 const dateSelect = document.getElementById("date-select");
+const datePickerTrigger = document.getElementById("date-picker-trigger");
 const serviceSelect = document.getElementById("service-select");
+const servicesGrid = document.getElementById("service-grid");
 const timeSlots = document.getElementById("time-slots");
 const summaryList = document.getElementById("summary-list");
 const summaryMessage = document.getElementById("summary-message");
 const whatsappLink = document.getElementById("whatsapp-link");
 const submitButton = form.querySelector(".form-submit");
-const serviceCards = document.querySelectorAll(".service-card[data-service]");
+let serviceCards = document.querySelectorAll(".service-card[data-service]");
 const bookingSteps = document.querySelectorAll(".booking-step");
 const toast = document.getElementById("site-toast");
 
@@ -28,6 +30,17 @@ let selectedTime = "";
 let lastSavedSignature = "";
 let isSaving = false;
 let currentUser = null;
+let servicesSignature = "";
+let isBookingDatePickerOpen = false;
+
+function escapeHtml(value) {
+  return String(value || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
 
 function populateDates() {
   dateSelect.innerHTML = '<option value="">Escolha uma data</option>';
@@ -38,6 +51,220 @@ function populateDates() {
     option.textContent = date;
     dateSelect.appendChild(option);
   });
+
+  updateDatePickerTrigger();
+}
+
+function getAvailabilityDateParts(dateLabel) {
+  const [weekday = "", date = ""] = String(dateLabel || "").split(", ");
+  const [day = "--", month = ""] = date.split("/");
+  const monthNames = {
+    "01": "jan.",
+    "02": "fev.",
+    "03": "mar.",
+    "04": "abr.",
+    "05": "mai.",
+    "06": "jun.",
+    "07": "jul.",
+    "08": "ago.",
+    "09": "set.",
+    "10": "out.",
+    "11": "nov.",
+    "12": "dez."
+  };
+
+  return {
+    weekday: weekday.slice(0, 3).toUpperCase(),
+    day,
+    month: monthNames[month] || month
+  };
+}
+
+function getWeekdayColumn(dateLabel) {
+  const [weekday = ""] = String(dateLabel || "").split(", ");
+  const columns = {
+    Domingo: 0,
+    "Segunda-feira": 1,
+    "Terca-feira": 2,
+    "Quarta-feira": 3,
+    "Quinta-feira": 4,
+    "Sexta-feira": 5,
+    Sabado: 6
+  };
+
+  return columns[weekday] || 0;
+}
+
+function updateDatePickerTrigger() {
+  datePickerTrigger.textContent = dateSelect.value || "Escolha uma data";
+  datePickerTrigger.classList.toggle("has-value", Boolean(dateSelect.value));
+}
+
+function renderBookingDatePicker() {
+  document.querySelector(".booking-date-dialog")?.remove();
+
+  if (!isBookingDatePickerOpen) {
+    return;
+  }
+
+  const dates = Object.keys(availability);
+  const monthGroups = [];
+
+  dates.forEach((dateLabel) => {
+    const dateParts = getAvailabilityDateParts(dateLabel);
+    const monthLabel = dateParts.month || "mes";
+    let monthGroup = monthGroups.find((item) => item.month === monthLabel);
+
+    if (!monthGroup) {
+      monthGroup = { month: monthLabel, dates: [] };
+      monthGroups.push(monthGroup);
+    }
+
+    monthGroup.dates.push(dateLabel);
+  });
+
+  const dialog = document.createElement("div");
+  dialog.className = "availability-date-dialog booking-date-dialog open";
+  dialog.setAttribute("role", "dialog");
+  dialog.setAttribute("aria-modal", "true");
+  dialog.setAttribute("aria-label", "Escolher data do agendamento");
+  dialog.innerHTML = `
+    <div class="date-dialog-backdrop" data-close-booking-date-picker></div>
+    <div class="date-dialog-panel">
+      <div class="date-dialog-heading">
+        <div>
+          <p class="eyebrow">Calendario</p>
+          <h3>Escolha uma data</h3>
+        </div>
+        <button class="date-dialog-close" type="button" data-close-booking-date-picker aria-label="Fechar calendario">&times;</button>
+      </div>
+      <div class="date-dialog-body">
+        ${monthGroups.map((monthGroup) => `
+          <section class="date-dialog-month">
+            <h4>${escapeHtml(monthGroup.month)}</h4>
+            <div class="date-dialog-weekdays" aria-hidden="true">
+              <span>DOM</span>
+              <span>SEG</span>
+              <span>TER</span>
+              <span>QUA</span>
+              <span>QUI</span>
+              <span>SEX</span>
+              <span>SAB</span>
+            </div>
+            <div class="date-dialog-grid">
+              ${Array.from({ length: getWeekdayColumn(monthGroup.dates[0]) }).map(() => `
+                <span class="date-dialog-empty" aria-hidden="true"></span>
+              `).join("")}
+              ${monthGroup.dates.map((dateLabel) => {
+                const dateParts = getAvailabilityDateParts(dateLabel);
+                const isActive = dateLabel === dateSelect.value;
+
+                return `
+                  <button
+                    class="date-dialog-day ${isActive ? "active" : ""}"
+                    type="button"
+                    data-booking-date="${escapeHtml(dateLabel)}"
+                  >
+                    <span>${escapeHtml(dateParts.weekday)}</span>
+                    <strong>${escapeHtml(dateParts.day)}</strong>
+                  </button>
+                `;
+              }).join("")}
+            </div>
+          </section>
+        `).join("")}
+      </div>
+    </div>
+  `;
+  document.body.appendChild(dialog);
+}
+
+function closeBookingDatePicker() {
+  isBookingDatePickerOpen = false;
+  renderBookingDatePicker();
+}
+
+function renderServices(services) {
+  const selectedService = serviceSelect.value;
+  servicesGrid.dataset.count = String(services.length);
+
+  if (!services.length) {
+    servicesGrid.innerHTML = "<div class='empty-state'>Nenhum servico disponivel no momento.</div>";
+    serviceSelect.innerHTML = '<option value="">Nenhum servico disponivel</option>';
+    updateSummary();
+    return;
+  }
+
+  const maxAppointments = Math.max(...services.map((service) => Number(service.appointmentCount || 0)));
+  const mostBookedIndex = maxAppointments > 0
+    ? services.findIndex((service) => Number(service.appointmentCount || 0) === maxAppointments)
+    : 0;
+
+  servicesGrid.innerHTML = services
+    .map((service, index) => `
+      <article class="service-card ${index === mostBookedIndex ? "featured" : ""}" data-service="${escapeHtml(service.name)}">
+        ${index === mostBookedIndex ? '<p class="service-tag">Mais pedido</p>' : ""}
+        <h3>${escapeHtml(service.name)}</h3>
+        <p>${escapeHtml(service.description || "Atendimento personalizado para cuidar das suas unhas.")}</p>
+        <div class="service-meta">
+          <strong>${escapeHtml(service.price || "Consultar")}</strong>
+          <span>${escapeHtml(service.duration || "Sob medida")}</span>
+        </div>
+        <button class="service-select-button" type="button">Selecionar</button>
+      </article>
+    `)
+    .join("");
+
+  serviceSelect.innerHTML = '<option value="">Selecione um servico</option>';
+  services.forEach((service) => {
+    const option = document.createElement("option");
+    option.value = service.name;
+    option.textContent = service.name;
+    serviceSelect.appendChild(option);
+  });
+
+  if (selectedService && services.some((service) => service.name === selectedService)) {
+    serviceSelect.value = selectedService;
+  }
+
+  serviceCards = document.querySelectorAll(".service-card[data-service]");
+  updateSummary();
+}
+
+async function loadServices({ silent = false } = {}) {
+  if (!servicesGrid) {
+    return;
+  }
+
+  try {
+    const response = await fetch("/api/services");
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(result.error || "Nao foi possivel carregar os servicos.");
+    }
+
+    const services = result.services || [];
+    const nextSignature = JSON.stringify(
+      services.map((service) => ({
+        id: service.id,
+        name: service.name,
+        description: service.description,
+        price: service.price,
+        duration: service.duration,
+        appointmentCount: service.appointmentCount
+      }))
+    );
+
+    if (nextSignature !== servicesSignature) {
+      servicesSignature = nextSignature;
+      renderServices(services);
+    }
+  } catch (error) {
+    if (!silent) {
+      showToast(error.message);
+    }
+  }
 }
 
 function renderTimeSlots(date) {
@@ -96,8 +323,17 @@ async function loadAvailability() {
       }
     });
 
+    const previousDate = dateSelect.value;
     populateDates();
-    renderTimeSlots("");
+    if (previousDate && availability[previousDate]) {
+      dateSelect.value = previousDate;
+      updateDatePickerTrigger();
+      renderTimeSlots(previousDate);
+    } else {
+      dateSelect.value = "";
+      updateDatePickerTrigger();
+      renderTimeSlots("");
+    }
   } catch (error) {
     timeSlots.innerHTML = `<p class='empty-state'>${error.message}</p>`;
   }
@@ -272,20 +508,51 @@ function askToOpenWhatsapp() {
 
 dateSelect.addEventListener("change", (event) => {
   renderTimeSlots(event.target.value);
+  updateDatePickerTrigger();
 });
 
 serviceSelect.addEventListener("change", updateSummary);
 form.addEventListener("input", updateSummary);
 
-serviceCards.forEach((card) => {
-  const selectService = () => {
-    serviceSelect.value = card.dataset.service;
-    updateSummary();
-    document.getElementById("agendamento").scrollIntoView({ behavior: "smooth", block: "start" });
-    dateSelect.focus({ preventScroll: true });
-  };
+datePickerTrigger.addEventListener("click", () => {
+  isBookingDatePickerOpen = true;
+  renderBookingDatePicker();
+});
 
-  card.querySelector(".service-select-button")?.addEventListener("click", selectService);
+document.addEventListener("click", (event) => {
+  const selectedDate = event.target.closest("[data-booking-date]");
+
+  if (selectedDate) {
+    dateSelect.value = selectedDate.dataset.bookingDate;
+    renderTimeSlots(dateSelect.value);
+    updateDatePickerTrigger();
+    closeBookingDatePicker();
+    return;
+  }
+
+  if (event.target.closest("[data-close-booking-date-picker]")) {
+    closeBookingDatePicker();
+  }
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && isBookingDatePickerOpen) {
+    closeBookingDatePicker();
+  }
+});
+
+servicesGrid.addEventListener("click", (event) => {
+  const button = event.target.closest(".service-select-button");
+  const card = event.target.closest(".service-card[data-service]");
+
+  if (!button || !card) {
+    return;
+  }
+
+  serviceSelect.value = card.dataset.service;
+  updateSummary();
+  document.getElementById("agendamento").scrollIntoView({ behavior: "smooth", block: "start" });
+  dateSelect.focus({ preventScroll: true });
 });
 
 form.addEventListener("submit", async (event) => {
@@ -312,6 +579,7 @@ form.addEventListener("submit", async (event) => {
     updateSummary();
     showToast("Agendamento salvo no banco de dados.");
     askToOpenWhatsapp();
+    await loadAvailability();
   } catch (error) {
     setSavingState(false);
     summaryMessage.textContent = error.message;
@@ -338,6 +606,7 @@ whatsappLink.addEventListener("click", async (event) => {
     updateSummary();
     showToast("Agendamento salvo no banco de dados.");
     askToOpenWhatsapp();
+    await loadAvailability();
   } catch (error) {
     setSavingState(false);
     summaryMessage.textContent = error.message;
@@ -345,5 +614,24 @@ whatsappLink.addEventListener("click", async (event) => {
   }
 });
 
+window.addEventListener("storage", (event) => {
+  if (event.key === "mnunes-services-updated") {
+    loadServices({ silent: true });
+  }
+});
+
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) {
+    loadServices({ silent: true });
+  }
+});
+
+window.setInterval(() => {
+  if (!document.hidden) {
+    loadServices({ silent: true });
+  }
+}, 8000);
+
+loadServices();
 loadAvailability();
 loadCurrentUser();

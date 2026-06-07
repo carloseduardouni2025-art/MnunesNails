@@ -59,7 +59,15 @@
         </div>
       </section>
 
-      <section class="appointments-workspace">
+      <nav class="admin-tabs" aria-label="Se&ccedil;&otilde;es da administra&ccedil;&atilde;o" role="tablist">
+        <button class="admin-tab active" type="button" role="tab" id="tab-agendamentos" data-admin-tab="agendamentos" aria-controls="panel-agendamentos" aria-selected="true">Agendamentos</button>
+        <button class="admin-tab" type="button" role="tab" id="tab-horarios" data-admin-tab="horarios" aria-controls="panel-horarios" aria-selected="false">Hor&aacute;rios</button>
+        <button class="admin-tab" type="button" role="tab" id="tab-servicos" data-admin-tab="servicos" aria-controls="panel-servicos" aria-selected="false">Servi&ccedil;os</button>
+        <button class="admin-tab" type="button" role="tab" id="tab-usuarios" data-admin-tab="usuarios" aria-controls="panel-usuarios" aria-selected="false">Usu&aacute;rios</button>
+      </nav>
+
+      <section class="admin-tab-panel active" id="panel-agendamentos" data-admin-panel="agendamentos" role="tabpanel" aria-labelledby="tab-agendamentos">
+        <div class="appointments-workspace">
         <div class="appointments-list card">
           <div class="appointments-toolbar">
             <div>
@@ -148,20 +156,23 @@
 
           <p class="editor-feedback" id="editor-feedback" role="status"></p>
         </form>
+        </div>
       </section>
 
-      <section class="admin-management">
+      <section class="admin-tab-panel" id="panel-horarios" data-admin-panel="horarios" role="tabpanel" aria-labelledby="tab-horarios" hidden>
         <div class="management-panel card">
           <div class="management-heading">
             <div>
               <p class="eyebrow">Disponibilidade</p>
-              <h2>Horarios livres</h2>
+              <h2>Hor&aacute;rios livres</h2>
             </div>
             <p class="management-hint">Clique em um horario para alternar entre livre e bloqueado.</p>
           </div>
           <div class="availability-board" id="availability-board"></div>
         </div>
+      </section>
 
+      <section class="admin-tab-panel" id="panel-usuarios" data-admin-panel="usuarios" role="tabpanel" aria-labelledby="tab-usuarios" hidden>
         <div class="management-panel card">
           <div class="management-heading">
             <div>
@@ -171,6 +182,26 @@
             <p class="management-hint">Edite nome, telefone e WhatsApp dos clientes.</p>
           </div>
           <div class="users-board" id="users-board"></div>
+        </div>
+      </section>
+
+      <section class="admin-tab-panel" id="panel-servicos" data-admin-panel="servicos" role="tabpanel" aria-labelledby="tab-servicos" hidden>
+        <div class="management-panel card">
+          <div class="management-heading">
+            <div>
+              <p class="eyebrow">Catalogo</p>
+              <h2>Servi&ccedil;os oferecidos</h2>
+            </div>
+            <p class="management-hint">Adicione, edite e ative os servi&ccedil;os que aparecem para as clientes.</p>
+          </div>
+          <form class="service-create-form" id="service-create-form">
+            <input type="text" name="name" placeholder="Nome do servi&ccedil;o" required>
+            <input type="text" name="price" placeholder="R$ 0">
+            <input type="number" name="duration" value="30" min="1" step="1">
+            <textarea name="description" rows="2" placeholder="Descri&ccedil;&atilde;o para o site"></textarea>
+            <button class="primary-button" type="submit">Adicionar servi&ccedil;o</button>
+          </form>
+          <div class="services-board" id="services-board"></div>
         </div>
       </section>
     </main>
