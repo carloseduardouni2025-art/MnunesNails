@@ -3,3 +3,6 @@ __pycache__/
 mnunesnails.db
 server.out.log
 server.err.log
+node_modules/
+
+.env

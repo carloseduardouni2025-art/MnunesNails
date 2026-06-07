@@ -259,6 +259,17 @@ async function saveAppointment() {
   return result.appointment;
 }
 
+function askToOpenWhatsapp() {
+  const wantsToSend = window.confirm("Agendamento salvo. Gostaria de enviar a mensagem pelo WhatsApp?");
+
+  if (wantsToSend) {
+    window.open(whatsappLink.href, "_blank", "noopener,noreferrer");
+    return;
+  }
+
+  showToast("Agendamento salvo sem enviar mensagem pelo WhatsApp.");
+}
+
 dateSelect.addEventListener("change", (event) => {
   renderTimeSlots(event.target.value);
 });
@@ -300,7 +311,7 @@ form.addEventListener("submit", async (event) => {
     await saveAppointment();
     updateSummary();
     showToast("Agendamento salvo no banco de dados.");
-    window.open(whatsappLink.href, "_blank", "noopener,noreferrer");
+    askToOpenWhatsapp();
   } catch (error) {
     setSavingState(false);
     summaryMessage.textContent = error.message;
@@ -326,7 +337,7 @@ whatsappLink.addEventListener("click", async (event) => {
     await saveAppointment();
     updateSummary();
     showToast("Agendamento salvo no banco de dados.");
-    window.open(whatsappLink.href, "_blank", "noopener,noreferrer");
+    askToOpenWhatsapp();
   } catch (error) {
     setSavingState(false);
     summaryMessage.textContent = error.message;
