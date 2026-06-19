@@ -13,9 +13,12 @@ import sqlite3
 import uuid
 from datetime import datetime, timedelta, timezone
 
+import firestore_backend
+
 
 ROOT = Path(__file__).resolve().parent
 DB_PATH = ROOT / "mnunesnails.db"
+FIRESTORE = None
 SESSION_COOKIE = "mnunes_session"
 SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30
 ALLOWED_STATUS = {"Confirmado", "Alterado", "Pendente", "Cancelado"}
@@ -85,12 +88,44 @@ WEEKDAYS_PT = {
 }
 
 
+def load_env_file():
+    env_path = ROOT / ".env"
+    if not env_path.is_file():
+        return
+
+    for line in env_path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        os.environ.setdefault(key, value)
+
+
+load_env_file()
+
+
 class AuthError(Exception):
     pass
 
 
 class ForbiddenError(Exception):
     pass
+
+
+def use_firestore():
+    backend = os.environ.get("DATABASE_BACKEND", "").strip().lower()
+    return backend == "firestore" or bool(
+        os.environ.get("FIREBASE_SERVICE_ACCOUNT") or os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+    )
+
+
+def get_firestore():
+    global FIRESTORE
+    if FIRESTORE is None:
+        FIRESTORE = firestore_backend.FirestoreBackend(ROOT)
+    return FIRESTORE
 
 
 def now_iso():
@@ -140,6 +175,10 @@ def ensure_column(connection, table, column, definition):
 
 
 def init_database():
+    if use_firestore():
+        get_firestore().init_database()
+        return
+
     with get_connection() as connection:
         connection.executescript(
             """
@@ -637,6 +676,9 @@ def update_current_user(connection, user_id, name, phone, phone_normalized):
 
 
 def create_session(actor_type, actor_id):
+    if use_firestore():
+        return get_firestore().create_session(actor_type, actor_id)
+
     token = secrets.token_urlsafe(32)
 
     with get_connection() as connection:
@@ -652,6 +694,9 @@ def create_session(actor_type, actor_id):
 
 
 def register_user(payload):
+    if use_firestore():
+        return get_firestore().register_user(payload)
+
     name, phone, phone_normalized, whatsapp = validate_registration_payload(payload)
     password = validate_password_payload(payload)
 
@@ -670,6 +715,9 @@ def register_user(payload):
 
 
 def login_user(payload):
+    if use_firestore():
+        return get_firestore().login_user(payload)
+
     phone = str(payload.get("phone", "")).strip()
     phone_normalized = normalize_phone(phone)
     password = validate_password_payload(payload)
@@ -685,6 +733,9 @@ def login_user(payload):
 
 
 def login_admin(payload):
+    if use_firestore():
+        return get_firestore().login_admin(payload)
+
     phone = str(payload.get("phone", "")).strip()
     phone_normalized = normalize_phone(phone)
     password = validate_password_payload(payload)
@@ -703,6 +754,10 @@ def login_admin(payload):
 
 
 def delete_session(token):
+    if use_firestore():
+        get_firestore().delete_session(token)
+        return
+
     if not token:
         return
 
@@ -711,6 +766,9 @@ def delete_session(token):
 
 
 def get_user_session(token):
+    if use_firestore():
+        return get_firestore().get_user_session(token)
+
     if not token:
         return None
 
@@ -748,6 +806,9 @@ def get_user_session(token):
 
 
 def list_users():
+    if use_firestore():
+        return get_firestore().list_users()
+
     with get_connection() as connection:
         rows = connection.execute(
             """
@@ -764,6 +825,9 @@ def list_users():
 
 
 def list_services(include_inactive=False):
+    if use_firestore():
+        return get_firestore().list_services(include_inactive=include_inactive)
+
     with get_connection() as connection:
         ensure_default_services(connection)
         query = """
@@ -786,6 +850,9 @@ def list_services(include_inactive=False):
 
 
 def get_service(service_id):
+    if use_firestore():
+        return get_firestore().get_service(service_id)
+
     with get_connection() as connection:
         row = connection.execute(
             "SELECT * FROM services WHERE id = ?",
@@ -796,6 +863,9 @@ def get_service(service_id):
 
 
 def create_service(payload):
+    if use_firestore():
+        return get_firestore().create_service(payload)
+
     data = validate_service_payload(payload)
     timestamp = now_iso()
 
@@ -827,6 +897,9 @@ def create_service(payload):
 
 
 def update_service(service_id, payload):
+    if use_firestore():
+        return get_firestore().update_service(service_id, payload)
+
     current = get_service(service_id)
 
     if current is None:
@@ -866,6 +939,9 @@ def update_service(service_id, payload):
 
 
 def delete_service(service_id):
+    if use_firestore():
+        return get_firestore().delete_service(service_id)
+
     with get_connection() as connection:
         current = get_service(service_id)
 
@@ -878,6 +954,9 @@ def delete_service(service_id):
 
 
 def update_user(user_id, payload):
+    if use_firestore():
+        return get_firestore().update_user(user_id, payload)
+
     name, phone, phone_normalized = validate_user_payload(payload)
     whatsapp = str(payload.get("whatsapp", phone)).strip() or phone
 
@@ -923,6 +1002,9 @@ def update_user(user_id, payload):
 
 
 def delete_user(user_id):
+    if use_firestore():
+        return get_firestore().delete_user(user_id)
+
     with get_connection() as connection:
         current = find_user_by_id(connection, user_id)
 
@@ -956,6 +1038,9 @@ def dynamic_slots_for_date(connection, date_label):
 
 
 def list_availability():
+    if use_firestore():
+        return get_firestore().list_availability()
+
     with get_connection() as connection:
         ensure_availability_window(connection)
         default_dates = upcoming_default_availability()
@@ -990,6 +1075,9 @@ def list_availability():
 
 
 def set_availability(payload):
+    if use_firestore():
+        return get_firestore().set_availability(payload)
+
     date_label, appointment_time, is_available = validate_availability_payload(payload)
     timestamp = now_iso()
 
@@ -1015,6 +1103,9 @@ def set_availability(payload):
 
 
 def set_day_availability(payload):
+    if use_firestore():
+        return get_firestore().set_day_availability(payload)
+
     date_label, is_available = validate_availability_day_payload(payload)
     timestamp = now_iso()
 
@@ -1127,6 +1218,9 @@ def is_slot_available(connection, date_label, appointment_time, service_name=Non
 
 
 def list_appointments(session, filters=None):
+    if use_firestore():
+        return get_firestore().list_appointments(session, filters)
+
     filters = filters or {}
     conditions = []
     params = []
@@ -1182,6 +1276,9 @@ def list_appointments(session, filters=None):
 
 
 def get_appointment(appointment_id):
+    if use_firestore():
+        return get_firestore().get_appointment(appointment_id)
+
     with get_connection() as connection:
         row = connection.execute(
             """
@@ -1232,6 +1329,9 @@ def resolve_appointment_user(connection, payload, session=None, current_user_id=
 
 
 def create_appointment(payload, session=None):
+    if use_firestore():
+        return get_firestore().create_appointment(payload, session=session)
+
     details = validate_appointment_details(payload)
     appointment_id = str(uuid.uuid4())
     timestamp = now_iso()
@@ -1266,6 +1366,9 @@ def create_appointment(payload, session=None):
 
 
 def update_appointment(appointment_id, payload, session):
+    if use_firestore():
+        return get_firestore().update_appointment(appointment_id, payload, session)
+
     current = get_appointment(appointment_id)
 
     if current is None:
@@ -1319,6 +1422,9 @@ def update_appointment(appointment_id, payload, session):
 
 
 def duplicate_appointment(appointment_id, session):
+    if use_firestore():
+        return get_firestore().duplicate_appointment(appointment_id, session)
+
     current = get_appointment(appointment_id)
 
     if current is None:
@@ -1338,6 +1444,9 @@ def duplicate_appointment(appointment_id, session):
 
 
 def cancel_appointment(appointment_id, session):
+    if use_firestore():
+        return get_firestore().cancel_appointment(appointment_id, session)
+
     current = get_appointment(appointment_id)
 
     if current is None:
@@ -1361,6 +1470,9 @@ def cancel_appointment(appointment_id, session):
 
 
 def delete_appointment(appointment_id, session):
+    if use_firestore():
+        return get_firestore().delete_appointment(appointment_id, session)
+
     current = get_appointment(appointment_id)
 
     if current is None:
@@ -1509,7 +1621,7 @@ class MnunesHandler(SimpleHTTPRequestHandler):
 
             try:
                 appointment = duplicate_appointment(match.group(1), session)
-            except ForbiddenError as error:
+            except (ForbiddenError, firestore_backend.ForbiddenError) as error:
                 self.send_json({"error": str(error)}, status=403)
                 return
 
@@ -1528,7 +1640,7 @@ class MnunesHandler(SimpleHTTPRequestHandler):
 
             try:
                 appointment = cancel_appointment(match.group(1), session)
-            except ForbiddenError as error:
+            except (ForbiddenError, firestore_backend.ForbiddenError) as error:
                 self.send_json({"error": str(error)}, status=403)
                 return
 
@@ -1598,7 +1710,7 @@ class MnunesHandler(SimpleHTTPRequestHandler):
         except ValueError as error:
             self.send_json({"error": str(error)}, status=400)
             return
-        except ForbiddenError as error:
+        except (ForbiddenError, firestore_backend.ForbiddenError) as error:
             self.send_json({"error": str(error)}, status=403)
             return
 
@@ -1650,7 +1762,7 @@ class MnunesHandler(SimpleHTTPRequestHandler):
             except ValueError as error:
                 self.send_json({"error": str(error)}, status=400)
                 return
-            except ForbiddenError as error:
+            except (ForbiddenError, firestore_backend.ForbiddenError) as error:
                 self.send_json({"error": str(error)}, status=403)
                 return
 
@@ -1671,7 +1783,7 @@ class MnunesHandler(SimpleHTTPRequestHandler):
                 {"ok": True, "role": role, "actor": actor},
                 cookies=[self.session_cookie(token)],
             )
-        except AuthError as error:
+        except (AuthError, firestore_backend.AuthError) as error:
             self.send_json({"error": str(error)}, status=401)
         except ValueError as error:
             self.send_json({"error": str(error)}, status=400)
@@ -1769,7 +1881,11 @@ def main():
     port = int(os.environ.get("PORT", "5500"))
     server = ThreadingHTTPServer((host, port), MnunesHandler)
     print(f"Servidor em http://{host}:{port}/")
-    print(f"Banco de dados em {DB_PATH}")
+    if use_firestore():
+        store = get_firestore()
+        print(f"Banco de dados Firestore: projeto={store.project_id}, database={store.database_id}")
+    else:
+        print(f"Banco de dados em {DB_PATH}")
     server.serve_forever()
 
 

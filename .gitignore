@@ -6,3 +6,5 @@ server.err.log
 node_modules/
 
 .env
+firebase-service-account.json
+*service-account*.json
