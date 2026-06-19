@@ -732,6 +732,25 @@ def login_user(payload):
     return row_to_user(user), token
 
 
+def recover_user_password(payload):
+    if use_firestore():
+        return get_firestore().recover_user_password(payload)
+
+    phone = str(payload.get("phone", "")).strip()
+    phone_normalized = normalize_phone(phone)
+    password = validate_password_payload(payload)
+
+    with get_connection() as connection:
+        user = find_user_by_phone(connection, phone_normalized)
+
+        if not user:
+            raise ValueError("Nao encontramos cadastro com este WhatsApp.")
+
+        set_user_password(connection, user["id"], password)
+
+    return {"ok": True}
+
+
 def login_admin(payload):
     if use_firestore():
         return get_firestore().login_admin(payload)
@@ -1550,6 +1569,13 @@ class MnunesHandler(SimpleHTTPRequestHandler):
             self.handle_auth(login_user)
             return
 
+        if parsed.path == "/api/auth/recover-password":
+            try:
+                self.send_json(recover_user_password(self.read_json()))
+            except ValueError as error:
+                self.send_json({"error": str(error)}, status=400)
+            return
+
         if parsed.path == "/api/auth/admin-login":
             self.handle_auth(login_admin)
             return
@@ -1564,8 +1590,12 @@ class MnunesHandler(SimpleHTTPRequestHandler):
             return
 
         if parsed.path == "/api/appointments":
+            session = self.require_session()
+            if session is None:
+                return
+
             try:
-                appointment = create_appointment(self.read_json(), session=self.current_session())
+                appointment = create_appointment(self.read_json(), session=session)
                 self.send_json({"appointment": appointment}, status=201)
             except ValueError as error:
                 self.send_json({"error": str(error)}, status=400)

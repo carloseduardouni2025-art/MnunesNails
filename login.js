@@ -1,13 +1,22 @@
 const clientForm = document.getElementById("client-login-form");
 const clientRegisterForm = document.getElementById("client-register-form");
+const clientRecoverForm = document.getElementById("client-recover-form");
 const adminForm = document.getElementById("admin-login-form");
 const clientFeedback = document.getElementById("client-login-feedback");
 const clientRegisterFeedback = document.getElementById("client-register-feedback");
+const clientRecoverFeedback = document.getElementById("client-recover-feedback");
 const adminFeedback = document.getElementById("admin-login-feedback");
 const toast = document.getElementById("site-toast");
 const showRegisterButton = document.getElementById("show-register-button");
 const showLoginButton = document.getElementById("show-login-button");
+const showRecoverButton = document.getElementById("show-recover-button");
+const showLoginFromRecoverButton = document.getElementById("show-login-from-recover-button");
 const passwordToggleButtons = document.querySelectorAll("[data-password-toggle]");
+const params = new URLSearchParams(window.location.search);
+
+function nextUrl() {
+  return params.get("next") === "booking" ? "index.html#agendamento" : "agendamentos.html";
+}
 
 function showToast(message) {
   toast.textContent = message;
@@ -35,18 +44,50 @@ function registerPayload() {
   return payload;
 }
 
+function recoverPayload() {
+  const payload = formPayload(clientRecoverForm);
+
+  if (payload.password !== payload.confirmPassword) {
+    throw new Error("As senhas nao conferem.");
+  }
+
+  delete payload.confirmPassword;
+  return payload;
+}
+
+function hideClientForms() {
+  if (clientForm) {
+    clientForm.hidden = true;
+  }
+
+  if (clientRegisterForm) {
+    clientRegisterForm.hidden = true;
+  }
+
+  if (clientRecoverForm) {
+    clientRecoverForm.hidden = true;
+  }
+}
+
 function showClientRegister() {
-  clientForm.hidden = true;
+  hideClientForms();
   clientRegisterForm.hidden = false;
   clientRegisterFeedback.textContent = "";
   clientRegisterForm.querySelector("input")?.focus();
 }
 
 function showClientLogin() {
-  clientRegisterForm.hidden = true;
+  hideClientForms();
   clientForm.hidden = false;
   clientFeedback.textContent = "";
   clientForm.querySelector("input")?.focus();
+}
+
+function showClientRecover() {
+  hideClientForms();
+  clientRecoverForm.hidden = false;
+  clientRecoverFeedback.textContent = "";
+  clientRecoverForm.querySelector("input")?.focus();
 }
 
 function togglePasswordVisibility(event) {
@@ -87,7 +128,7 @@ async function submitClientLogin(event) {
   try {
     await requestJson("/api/auth/login", formPayload(clientForm));
     showToast("Acesso liberado.");
-    window.location.href = "agendamentos.html";
+    window.location.href = nextUrl();
   } catch (error) {
     clientFeedback.textContent = error.message;
     showToast(error.message);
@@ -101,9 +142,24 @@ async function submitClientRegister(event) {
   try {
     await requestJson("/api/auth/register", registerPayload());
     showToast("Cadastro criado.");
-    window.location.href = "agendamentos.html";
+    window.location.href = nextUrl();
   } catch (error) {
     clientRegisterFeedback.textContent = error.message;
+    showToast(error.message);
+  }
+}
+
+async function submitPasswordRecovery(event) {
+  event.preventDefault();
+  clientRecoverFeedback.textContent = "Atualizando senha...";
+
+  try {
+    await requestJson("/api/auth/recover-password", recoverPayload());
+    showToast("Senha atualizada. Entre com a nova senha.");
+    showClientLogin();
+    clientForm.elements.phone.value = clientRecoverForm.elements.phone.value;
+  } catch (error) {
+    clientRecoverFeedback.textContent = error.message;
     showToast(error.message);
   }
 }
@@ -130,6 +186,10 @@ if (clientRegisterForm) {
   clientRegisterForm.addEventListener("submit", submitClientRegister);
 }
 
+if (clientRecoverForm) {
+  clientRecoverForm.addEventListener("submit", submitPasswordRecovery);
+}
+
 if (showRegisterButton && clientForm && clientRegisterForm) {
   showRegisterButton.addEventListener("click", showClientRegister);
 }
@@ -138,10 +198,22 @@ if (showLoginButton && clientForm && clientRegisterForm) {
   showLoginButton.addEventListener("click", showClientLogin);
 }
 
+if (showRecoverButton && clientRecoverForm) {
+  showRecoverButton.addEventListener("click", showClientRecover);
+}
+
+if (showLoginFromRecoverButton && clientForm) {
+  showLoginFromRecoverButton.addEventListener("click", showClientLogin);
+}
+
 passwordToggleButtons.forEach((button) => {
   button.addEventListener("click", togglePasswordVisibility);
 });
 
 if (adminForm) {
   adminForm.addEventListener("submit", submitAdminLogin);
+}
+
+if (params.get("mode") === "register" && clientRegisterForm) {
+  showClientRegister();
 }

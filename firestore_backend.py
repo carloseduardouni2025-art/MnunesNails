@@ -536,6 +536,15 @@ class FirestoreBackend:
         token = self.create_session("user", user["id"])
         return self.row_to_user(user), token
 
+    def recover_user_password(self, payload):
+        phone_normalized = normalize_phone(str(payload.get("phone", "")).strip())
+        password = validate_password_payload(payload)
+        user = self.find_user_by_phone(phone_normalized)
+        if not user:
+            raise ValueError("Nao encontramos cadastro com este WhatsApp.")
+        self.set_user_password(user["id"], password)
+        return {"ok": True}
+
     def login_admin(self, payload):
         phone_normalized = normalize_phone(str(payload.get("phone", "")).strip())
         password = validate_password_payload(payload)

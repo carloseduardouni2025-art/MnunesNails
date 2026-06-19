@@ -728,6 +728,13 @@ textarea:focus-visible,
   text-decoration: underline;
 }
 
+button.auth-forgot-link {
+  border: 0;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
 .auth-submit {
   min-height: 48px;
   border-radius: 8px;

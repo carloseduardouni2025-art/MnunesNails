@@ -25,6 +25,7 @@ const submitButton = form.querySelector(".form-submit");
 let serviceCards = document.querySelectorAll(".service-card[data-service]");
 const bookingSteps = document.querySelectorAll(".booking-step");
 const toast = document.getElementById("site-toast");
+const BOOKING_DRAFT_KEY = "mnunes-booking-draft";
 
 let selectedTime = "";
 let lastSavedSignature = "";
@@ -32,6 +33,29 @@ let isSaving = false;
 let currentUser = null;
 let servicesSignature = "";
 let isBookingDatePickerOpen = false;
+
+function storeBookingDraft() {
+  sessionStorage.setItem(BOOKING_DRAFT_KEY, JSON.stringify(getAppointmentPayload()));
+}
+
+function clearBookingDraft() {
+  sessionStorage.removeItem(BOOKING_DRAFT_KEY);
+}
+
+function redirectToRegister() {
+  storeBookingDraft();
+  showToast("Crie seu cadastro para confirmar o agendamento.");
+  window.location.href = "login.html?mode=register&next=booking";
+}
+
+function requireAuthenticatedUser() {
+  if (currentUser) {
+    return true;
+  }
+
+  redirectToRegister();
+  return false;
+}
 
 function escapeHtml(value) {
   return String(value || "")
@@ -305,6 +329,59 @@ function renderTimeSlots(date) {
   updateSummary();
 }
 
+function selectTimeSlot(time) {
+  if (!time) {
+    return;
+  }
+
+  const buttons = document.querySelectorAll(".time-slot");
+  buttons.forEach((button) => {
+    const isSelected = button.textContent.trim() === time;
+    button.classList.toggle("active", isSelected && !button.disabled);
+
+    if (isSelected && !button.disabled) {
+      selectedTime = time;
+    }
+  });
+
+  updateSummary();
+}
+
+function restoreBookingDraft() {
+  const rawDraft = sessionStorage.getItem(BOOKING_DRAFT_KEY);
+
+  if (!rawDraft) {
+    return;
+  }
+
+  let draft;
+
+  try {
+    draft = JSON.parse(rawDraft);
+  } catch (error) {
+    clearBookingDraft();
+    return;
+  }
+
+  if (!currentUser) {
+    return;
+  }
+
+  form.elements.service.value = draft.service || "";
+  form.elements.notes.value = draft.notes || "";
+
+  if (draft.date && availability[draft.date]) {
+    dateSelect.value = draft.date;
+    updateDatePickerTrigger();
+    renderTimeSlots(draft.date);
+    selectTimeSlot(draft.time);
+  }
+
+  clearBookingDraft();
+  showToast("Cadastro concluido. Revise e confirme seu agendamento.");
+  document.getElementById("agendamento").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
 async function loadAvailability() {
   try {
     const response = await fetch("/api/availability");
@@ -487,6 +564,10 @@ async function saveAppointment() {
 
   if (!response.ok) {
     setSavingState(false);
+    if (response.status === 401) {
+      redirectToRegister();
+      return null;
+    }
     throw new Error(result.error || "Não foi possível salvar o agendamento.");
   }
 
@@ -573,6 +654,10 @@ form.addEventListener("submit", async (event) => {
     return;
   }
 
+  if (!requireAuthenticatedUser()) {
+    return;
+  }
+
   try {
     summaryMessage.textContent = "Salvando agendamento no banco de dados...";
     await saveAppointment();
@@ -599,6 +684,10 @@ whatsappLink.addEventListener("click", async (event) => {
   }
 
   event.preventDefault();
+
+  if (!requireAuthenticatedUser()) {
+    return;
+  }
 
   try {
     summaryMessage.textContent = "Salvando agendamento no banco de dados...";
@@ -632,6 +721,11 @@ window.setInterval(() => {
   }
 }, 8000);
 
-loadServices();
-loadAvailability();
-loadCurrentUser();
+async function initializePage() {
+  await loadServices();
+  await loadAvailability();
+  await loadCurrentUser();
+  restoreBookingDraft();
+}
+
+initializePage();

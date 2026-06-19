@@ -47,6 +47,7 @@
           </span>
         </label>
 
+        <button class="auth-forgot-link" type="button" id="show-recover-button">Esqueci minha senha</button>
         <a class="auth-forgot-link" href="index.html#agendamento">Voltar para agendar</a>
 
         <button class="primary-button auth-submit" type="submit">Entrar</button>
@@ -93,6 +94,45 @@
         </p>
 
         <p class="editor-feedback" id="client-register-feedback" role="status"></p>
+      </form>
+
+      <form class="auth-card auth-card-compact card" id="client-recover-form" hidden>
+        <div class="auth-card-header">
+          <h1>Recuperar senha</h1>
+          <p>Informe o WhatsApp cadastrado e defina uma nova senha.</p>
+        </div>
+
+        <div class="auth-divider"><span>ou</span></div>
+
+        <label>
+          WhatsApp cadastrado
+          <input type="tel" name="phone" placeholder="(11) 99999-9999" required>
+        </label>
+
+        <label>
+          Nova senha
+          <span class="password-field">
+            <input type="password" name="password" placeholder="Digite a nova senha" required>
+            <button class="password-toggle" type="button" data-password-toggle aria-label="Mostrar senha">Ver</button>
+          </span>
+        </label>
+
+        <label>
+          Confirmar nova senha
+          <span class="password-field">
+            <input type="password" name="confirmPassword" placeholder="Repita a nova senha" required>
+            <button class="password-toggle" type="button" data-password-toggle aria-label="Mostrar senha">Ver</button>
+          </span>
+        </label>
+
+        <button class="primary-button auth-submit" type="submit">Atualizar senha</button>
+
+        <p class="auth-switch">
+          Lembrou a senha?
+          <button type="button" id="show-login-from-recover-button">Entrar</button>
+        </p>
+
+        <p class="editor-feedback" id="client-recover-feedback" role="status"></p>
       </form>
     </section>
   </main>
