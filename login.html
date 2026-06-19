@@ -109,6 +109,14 @@
           <input type="tel" name="phone" placeholder="(11) 99999-9999" required>
         </label>
 
+        <button class="secondary-button auth-secondary" type="button" id="send-recovery-code-button">Enviar codigo SMS</button>
+        <div class="recaptcha-box" id="recover-recaptcha"></div>
+
+        <label>
+          Codigo recebido por SMS
+          <input type="text" name="smsCode" inputmode="numeric" autocomplete="one-time-code" placeholder="000000" required>
+        </label>
+
         <label>
           Nova senha
           <span class="password-field">

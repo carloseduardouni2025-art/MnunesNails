@@ -740,6 +740,17 @@ button.auth-forgot-link {
   border-radius: 8px;
 }
 
+.auth-secondary {
+  min-height: 44px;
+  border-radius: 8px;
+}
+
+.recaptcha-box {
+  display: grid;
+  justify-content: center;
+  min-height: 78px;
+}
+
 .auth-switch {
   margin: 8px 0 0;
   color: #6e6268;

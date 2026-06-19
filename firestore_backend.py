@@ -7,6 +7,7 @@ import re
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 
 SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30
@@ -66,6 +67,7 @@ DEFAULT_DAY_SLOTS = [
 ]
 WORKDAY_START_MINUTES = 8 * 60
 WORKDAY_END_MINUTES = 18 * 60
+DEFAULT_TIMEZONE = "America/Sao_Paulo"
 WEEKDAYS_PT = {
     0: "Segunda-feira",
     1: "Terca-feira",
@@ -87,6 +89,17 @@ class ForbiddenError(Exception):
 
 def now_iso():
     return datetime.now(timezone.utc).isoformat()
+
+
+def app_timezone():
+    try:
+        return ZoneInfo(os.environ.get("APP_TIMEZONE", DEFAULT_TIMEZONE))
+    except Exception:
+        return ZoneInfo(DEFAULT_TIMEZONE)
+
+
+def local_now():
+    return datetime.now(app_timezone())
 
 
 def normalize_phone(phone):
@@ -137,7 +150,7 @@ def availability_sort_key(date_label):
     try:
         _, date_part = date_label.split(", ", 1)
         day, month = [int(part) for part in date_part.split("/")]
-        today = datetime.now().date()
+        today = local_now().date()
         return today.replace(month=month, day=day)
     except (ValueError, TypeError):
         return datetime.max.date()
@@ -145,12 +158,40 @@ def availability_sort_key(date_label):
 
 def upcoming_default_availability():
     dates = {}
-    cursor = datetime.now().date()
+    cursor = local_now().date()
     end_date = cursor.replace(month=12, day=31)
     while cursor <= end_date:
         dates[date_label_for(cursor)] = DEFAULT_DAY_SLOTS
         cursor += timedelta(days=1)
     return dates
+
+
+def date_from_label(date_label):
+    try:
+        _, date_part = str(date_label).split(", ", 1)
+        day, month = [int(part) for part in date_part.split("/")]
+        today = local_now().date()
+        return today.replace(month=month, day=day)
+    except (ValueError, TypeError):
+        return None
+
+
+def is_future_slot(date_label, appointment_time):
+    appointment_date = date_from_label(date_label)
+
+    if appointment_date is None:
+        return False
+
+    now = local_now()
+    today = now.date()
+
+    if appointment_date < today:
+        return False
+
+    if appointment_date > today:
+        return True
+
+    return time_to_minutes(appointment_time) > (now.hour * 60 + now.minute)
 
 
 def validate_user_payload(payload):
@@ -755,6 +796,8 @@ class FirestoreBackend:
         self.ensure_availability_window()
         if date_label not in upcoming_default_availability() or not is_within_workday(appointment_time):
             return False
+        if not is_future_slot(date_label, appointment_time):
+            return False
         if appointment_time in DEFAULT_DAY_SLOTS:
             slot = self.doc_data("availability_slots", self.availability_doc_id(date_label, appointment_time))
             if not slot or not slot.get("is_available"):
@@ -779,6 +822,9 @@ class FirestoreBackend:
         for date_label in sorted(default_dates.keys(), key=availability_sort_key):
             date_group = {"date": date_label, "slots": []}
             for appointment_time in self.dynamic_slots_for_date(date_label):
+                if not is_future_slot(date_label, appointment_time):
+                    continue
+
                 is_manual_available = manual.get((date_label, appointment_time), True)
                 date_group["slots"].append(
                     {

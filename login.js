@@ -11,8 +11,14 @@ const showRegisterButton = document.getElementById("show-register-button");
 const showLoginButton = document.getElementById("show-login-button");
 const showRecoverButton = document.getElementById("show-recover-button");
 const showLoginFromRecoverButton = document.getElementById("show-login-from-recover-button");
+const sendRecoveryCodeButton = document.getElementById("send-recovery-code-button");
 const passwordToggleButtons = document.querySelectorAll("[data-password-toggle]");
 const params = new URLSearchParams(window.location.search);
+let firebaseAuth = null;
+let firebaseAuthSdk = null;
+let recoveryRecaptcha = null;
+let recoveryConfirmation = null;
+let recoveryIdToken = "";
 
 function nextUrl() {
   return params.get("next") === "booking" ? "index.html#agendamento" : "agendamentos.html";
@@ -51,8 +57,32 @@ function recoverPayload() {
     throw new Error("As senhas nao conferem.");
   }
 
+  if (!recoveryIdToken) {
+    throw new Error("Confirme o codigo SMS antes de atualizar a senha.");
+  }
+
   delete payload.confirmPassword;
+  delete payload.smsCode;
+  payload.firebaseIdToken = recoveryIdToken;
   return payload;
+}
+
+function normalizePhoneDigits(phone) {
+  return String(phone || "").replace(/\D/g, "");
+}
+
+function phoneToE164(phone) {
+  const digits = normalizePhoneDigits(phone);
+
+  if (digits.startsWith("55") && (digits.length === 12 || digits.length === 13)) {
+    return `+${digits}`;
+  }
+
+  if (digits.length === 10 || digits.length === 11) {
+    return `+55${digits}`;
+  }
+
+  throw new Error("Informe um celular valido com DDD.");
 }
 
 function hideClientForms() {
@@ -87,6 +117,8 @@ function showClientRecover() {
   hideClientForms();
   clientRecoverForm.hidden = false;
   clientRecoverFeedback.textContent = "";
+  recoveryIdToken = "";
+  recoveryConfirmation = null;
   clientRecoverForm.querySelector("input")?.focus();
 }
 
@@ -121,6 +153,89 @@ async function requestJson(url, payload) {
   return result;
 }
 
+async function loadFirebaseAuth() {
+  if (firebaseAuth && firebaseAuthSdk) {
+    return { auth: firebaseAuth, sdk: firebaseAuthSdk };
+  }
+
+  const response = await fetch("/api/firebase-config");
+  const result = await response.json();
+
+  if (!response.ok || !result.enabled) {
+    throw new Error("Firebase SMS ainda nao esta configurado no servidor.");
+  }
+
+  const [{ initializeApp }, sdk] = await Promise.all([
+    import("https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js"),
+    import("https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js")
+  ]);
+
+  const app = initializeApp(result.config);
+  firebaseAuth = sdk.getAuth(app);
+  firebaseAuth.languageCode = "pt-BR";
+  firebaseAuthSdk = sdk;
+  return { auth: firebaseAuth, sdk: firebaseAuthSdk };
+}
+
+async function ensureRecoveryRecaptcha() {
+  const { auth, sdk } = await loadFirebaseAuth();
+
+  if (!recoveryRecaptcha) {
+    recoveryRecaptcha = new sdk.RecaptchaVerifier(auth, "recover-recaptcha", {
+      size: "normal"
+    });
+  }
+
+  return recoveryRecaptcha;
+}
+
+async function sendRecoveryCode() {
+  if (!clientRecoverForm) {
+    return;
+  }
+
+  sendRecoveryCodeButton.disabled = true;
+  clientRecoverFeedback.textContent = "Enviando codigo SMS...";
+  recoveryIdToken = "";
+  recoveryConfirmation = null;
+
+  try {
+    const phone = phoneToE164(clientRecoverForm.elements.phone.value);
+    const { auth, sdk } = await loadFirebaseAuth();
+    const recaptcha = await ensureRecoveryRecaptcha();
+    recoveryConfirmation = await sdk.signInWithPhoneNumber(auth, phone, recaptcha);
+    clientRecoverFeedback.textContent = "Codigo enviado por SMS. Informe o codigo recebido.";
+    showToast("Codigo SMS enviado.");
+    clientRecoverForm.elements.smsCode.focus();
+  } catch (error) {
+    clientRecoverFeedback.textContent = error.message || "Nao foi possivel enviar o codigo SMS.";
+    showToast(clientRecoverFeedback.textContent);
+
+    if (recoveryRecaptcha) {
+      recoveryRecaptcha.clear();
+      recoveryRecaptcha = null;
+    }
+  } finally {
+    sendRecoveryCodeButton.disabled = false;
+  }
+}
+
+async function confirmRecoveryCode() {
+  const code = clientRecoverForm.elements.smsCode.value.trim();
+
+  if (!recoveryConfirmation) {
+    throw new Error("Envie o codigo SMS antes de atualizar a senha.");
+  }
+
+  if (!code) {
+    throw new Error("Informe o codigo recebido por SMS.");
+  }
+
+  const credential = await recoveryConfirmation.confirm(code);
+  recoveryIdToken = await credential.user.getIdToken();
+  return recoveryIdToken;
+}
+
 async function submitClientLogin(event) {
   event.preventDefault();
   clientFeedback.textContent = "Entrando...";
@@ -151,9 +266,11 @@ async function submitClientRegister(event) {
 
 async function submitPasswordRecovery(event) {
   event.preventDefault();
-  clientRecoverFeedback.textContent = "Atualizando senha...";
+  clientRecoverFeedback.textContent = "Validando codigo SMS...";
 
   try {
+    await confirmRecoveryCode();
+    clientRecoverFeedback.textContent = "Atualizando senha...";
     await requestJson("/api/auth/recover-password", recoverPayload());
     showToast("Senha atualizada. Entre com a nova senha.");
     showClientLogin();
@@ -204,6 +321,10 @@ if (showRecoverButton && clientRecoverForm) {
 
 if (showLoginFromRecoverButton && clientForm) {
   showLoginFromRecoverButton.addEventListener("click", showClientLogin);
+}
+
+if (sendRecoveryCodeButton) {
+  sendRecoveryCodeButton.addEventListener("click", sendRecoveryCode);
 }
 
 passwordToggleButtons.forEach((button) => {

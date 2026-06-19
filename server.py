@@ -4,6 +4,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 import hashlib
 import hmac
+import base64
 import json
 import mimetypes
 import os
@@ -12,6 +13,7 @@ import secrets
 import sqlite3
 import uuid
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 import firestore_backend
 
@@ -19,6 +21,7 @@ import firestore_backend
 ROOT = Path(__file__).resolve().parent
 DB_PATH = ROOT / "mnunesnails.db"
 FIRESTORE = None
+FIREBASE_ADMIN_APP = None
 SESSION_COOKIE = "mnunes_session"
 SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30
 ALLOWED_STATUS = {"Confirmado", "Alterado", "Pendente", "Cancelado"}
@@ -77,6 +80,7 @@ DEFAULT_DAY_SLOTS = [
 ]
 WORKDAY_START_MINUTES = 8 * 60
 WORKDAY_END_MINUTES = 18 * 60
+DEFAULT_TIMEZONE = "America/Sao_Paulo"
 WEEKDAYS_PT = {
     0: "Segunda-feira",
     1: "Terca-feira",
@@ -130,8 +134,87 @@ def get_firestore():
     return FIRESTORE
 
 
+def firebase_web_config():
+    config = {
+        "apiKey": os.environ.get("FIREBASE_WEB_API_KEY", ""),
+        "authDomain": os.environ.get("FIREBASE_AUTH_DOMAIN", ""),
+        "projectId": os.environ.get("FIREBASE_PROJECT_ID", "mnunesnails"),
+        "appId": os.environ.get("FIREBASE_WEB_APP_ID", ""),
+        "messagingSenderId": os.environ.get("FIREBASE_MESSAGING_SENDER_ID", ""),
+    }
+    return {key: value for key, value in config.items() if value}
+
+
+def get_firebase_admin_app():
+    global FIREBASE_ADMIN_APP
+
+    if FIREBASE_ADMIN_APP is not None:
+        return FIREBASE_ADMIN_APP
+
+    try:
+        import firebase_admin
+        from firebase_admin import credentials
+    except ImportError as error:
+        raise RuntimeError("Instale firebase-admin para validar SMS do Firebase.") from error
+
+    if firebase_admin._apps:
+        FIREBASE_ADMIN_APP = firebase_admin.get_app()
+        return FIREBASE_ADMIN_APP
+
+    project_id = os.environ.get("FIREBASE_PROJECT_ID", "mnunesnails")
+    credentials_json = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON", "").strip()
+    credentials_path = os.environ.get("FIREBASE_SERVICE_ACCOUNT") or os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+
+    if credentials_json:
+        try:
+            credentials_info = json.loads(credentials_json)
+        except json.JSONDecodeError:
+            credentials_info = json.loads(base64.b64decode(credentials_json).decode("utf-8"))
+        cred = credentials.Certificate(credentials_info)
+        FIREBASE_ADMIN_APP = firebase_admin.initialize_app(cred, {"projectId": project_id})
+        return FIREBASE_ADMIN_APP
+
+    if credentials_path:
+        credentials_path = str((ROOT / credentials_path).resolve()) if not os.path.isabs(credentials_path) else credentials_path
+        cred = credentials.Certificate(credentials_path)
+        FIREBASE_ADMIN_APP = firebase_admin.initialize_app(cred, {"projectId": project_id})
+        return FIREBASE_ADMIN_APP
+
+    raise RuntimeError("Configure FIREBASE_SERVICE_ACCOUNT_JSON para validar SMS do Firebase.")
+
+
+def verify_sms_recovery_token(firebase_id_token, expected_phone_normalized):
+    if not firebase_id_token:
+        raise AuthError("Confirme o codigo SMS antes de atualizar a senha.")
+
+    try:
+        from firebase_admin import auth
+
+        decoded = auth.verify_id_token(firebase_id_token, app=get_firebase_admin_app())
+    except Exception as error:
+        raise AuthError("Codigo SMS invalido ou expirado.") from error
+
+    token_phone = normalize_phone(decoded.get("phone_number", ""))
+
+    if not token_phone or token_phone != expected_phone_normalized:
+        raise AuthError("O telefone confirmado nao corresponde ao cadastro informado.")
+
+    return decoded
+
+
 def now_iso():
     return datetime.now(timezone.utc).isoformat()
+
+
+def app_timezone():
+    try:
+        return ZoneInfo(os.environ.get("APP_TIMEZONE", DEFAULT_TIMEZONE))
+    except Exception:
+        return ZoneInfo(DEFAULT_TIMEZONE)
+
+
+def local_now():
+    return datetime.now(app_timezone())
 
 
 def normalize_phone(phone):
@@ -441,7 +524,7 @@ def availability_sort_key(date_label):
     try:
         _, date_part = date_label.split(", ", 1)
         day, month = [int(part) for part in date_part.split("/")]
-        today = datetime.now().date()
+        today = local_now().date()
         return today.replace(month=month, day=day)
     except (ValueError, TypeError):
         return datetime.max.date()
@@ -449,7 +532,7 @@ def availability_sort_key(date_label):
 
 def upcoming_default_availability():
     dates = {}
-    cursor = datetime.now().date()
+    cursor = local_now().date()
     end_date = cursor.replace(month=12, day=31)
 
     while cursor <= end_date:
@@ -457,6 +540,34 @@ def upcoming_default_availability():
         cursor += timedelta(days=1)
 
     return dates
+
+
+def date_from_label(date_label):
+    try:
+        _, date_part = str(date_label).split(", ", 1)
+        day, month = [int(part) for part in date_part.split("/")]
+        today = local_now().date()
+        return today.replace(month=month, day=day)
+    except (ValueError, TypeError):
+        return None
+
+
+def is_future_slot(date_label, appointment_time):
+    appointment_date = date_from_label(date_label)
+
+    if appointment_date is None:
+        return False
+
+    now = local_now()
+    today = now.date()
+
+    if appointment_date < today:
+        return False
+
+    if appointment_date > today:
+        return True
+
+    return time_to_minutes(appointment_time) > (now.hour * 60 + now.minute)
 
 
 def ensure_availability_window(connection):
@@ -735,12 +846,13 @@ def login_user(payload):
 
 
 def recover_user_password(payload):
-    if use_firestore():
-        return get_firestore().recover_user_password(payload)
-
     phone = str(payload.get("phone", "")).strip()
     phone_normalized = normalize_phone(phone)
     password = validate_password_payload(payload)
+    verify_sms_recovery_token(payload.get("firebaseIdToken", ""), phone_normalized)
+
+    if use_firestore():
+        return get_firestore().recover_user_password(payload)
 
     with get_connection() as connection:
         user = find_user_by_phone(connection, phone_normalized)
@@ -1082,6 +1194,9 @@ def list_availability():
             date_group = {"date": date_label, "slots": []}
 
             for appointment_time in dynamic_slots_for_date(connection, date_label):
+                if not is_future_slot(date_label, appointment_time):
+                    continue
+
                 is_manual_available = manual_availability.get((date_label, appointment_time), True)
                 date_group["slots"].append(
                     {
@@ -1211,6 +1326,9 @@ def is_slot_available(connection, date_label, appointment_time, service_name=Non
     ensure_availability_window(connection)
 
     if date_label not in upcoming_default_availability() or not is_within_workday(appointment_time):
+        return False
+
+    if not is_future_slot(date_label, appointment_time):
         return False
 
     if appointment_time in DEFAULT_DAY_SLOTS:
@@ -1544,6 +1662,16 @@ class MnunesHandler(SimpleHTTPRequestHandler):
             self.send_json(payload)
             return
 
+        if parsed.path == "/api/firebase-config":
+            config = firebase_web_config()
+            self.send_json(
+                {
+                    "enabled": bool(config.get("apiKey") and config.get("authDomain") and config.get("appId")),
+                    "config": config,
+                }
+            )
+            return
+
         if parsed.path == "/api/users":
             session = self.require_session("admin")
             if session is None:
@@ -1587,6 +1715,8 @@ class MnunesHandler(SimpleHTTPRequestHandler):
         if parsed.path == "/api/auth/recover-password":
             try:
                 self.send_json(recover_user_password(self.read_json()))
+            except (AuthError, firestore_backend.AuthError) as error:
+                self.send_json({"error": str(error)}, status=401)
             except ValueError as error:
                 self.send_json({"error": str(error)}, status=400)
             return
