@@ -587,6 +587,11 @@ function askToOpenWhatsapp() {
   showToast("Agendamento salvo sem enviar mensagem pelo WhatsApp.");
 }
 
+function redirectToAppointments(appointment) {
+  const params = appointment?.id ? `?appointment=${encodeURIComponent(appointment.id)}` : "";
+  window.location.href = `agendamentos.html${params}`;
+}
+
 dateSelect.addEventListener("change", (event) => {
   renderTimeSlots(event.target.value);
   updateDatePickerTrigger();
@@ -660,11 +665,10 @@ form.addEventListener("submit", async (event) => {
 
   try {
     summaryMessage.textContent = "Salvando agendamento no banco de dados...";
-    await saveAppointment();
+    const appointment = await saveAppointment();
     updateSummary();
     showToast("Agendamento salvo no banco de dados.");
-    askToOpenWhatsapp();
-    await loadAvailability();
+    redirectToAppointments(appointment);
   } catch (error) {
     setSavingState(false);
     summaryMessage.textContent = error.message;
@@ -691,11 +695,10 @@ whatsappLink.addEventListener("click", async (event) => {
 
   try {
     summaryMessage.textContent = "Salvando agendamento no banco de dados...";
-    await saveAppointment();
+    const appointment = await saveAppointment();
     updateSummary();
     showToast("Agendamento salvo no banco de dados.");
-    askToOpenWhatsapp();
-    await loadAvailability();
+    redirectToAppointments(appointment);
   } catch (error) {
     setSavingState(false);
     summaryMessage.textContent = error.message;

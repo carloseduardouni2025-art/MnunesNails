@@ -153,16 +153,32 @@ async function requestJson(url, payload) {
   return result;
 }
 
+async function readJsonResponse(response) {
+  const contentType = response.headers.get("Content-Type") || "";
+
+  if (!contentType.toLowerCase().includes("application/json")) {
+    throw new Error("Abra o site pelo servidor Python do projeto para usar a recuperacao de senha.");
+  }
+
+  return response.json();
+}
+
 async function loadFirebaseAuth() {
   if (firebaseAuth && firebaseAuthSdk) {
     return { auth: firebaseAuth, sdk: firebaseAuthSdk };
   }
 
   const response = await fetch("/api/firebase-config");
-  const result = await response.json();
+  const result = await readJsonResponse(response);
 
   if (!response.ok || !result.enabled) {
-    throw new Error("Firebase SMS ainda nao esta configurado no servidor.");
+    const missing = Array.isArray(result.missing) && result.missing.length
+      ? ` Variaveis faltando: ${result.missing.join(", ")}.`
+      : "";
+    if (missing) {
+      console.warn(`Firebase SMS nao configurado.${missing}`);
+    }
+    throw new Error("Recuperacao por SMS ainda nao esta disponivel. Fale com o studio para redefinir sua senha.");
   }
 
   const [{ initializeApp }, sdk] = await Promise.all([

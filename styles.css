@@ -751,6 +751,11 @@ button.auth-forgot-link {
   min-height: 78px;
 }
 
+.recaptcha-box:empty {
+  display: none;
+  min-height: 0;
+}
+
 .auth-switch {
   margin: 8px 0 0;
   color: #6e6268;

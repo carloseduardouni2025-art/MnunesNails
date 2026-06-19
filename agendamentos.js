@@ -25,8 +25,9 @@ const metrics = document.getElementById("appointments-metrics");
 const toast = document.getElementById("site-toast");
 const logoutButton = document.getElementById("logout-button");
 const sessionBadge = document.getElementById("session-badge");
+const params = new URLSearchParams(window.location.search);
 
-let selectedId = "";
+let selectedId = params.get("appointment") || "";
 let appointments = [];
 let currentUser = null;
 

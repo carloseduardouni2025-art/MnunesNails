@@ -127,6 +127,27 @@ def use_firestore():
     )
 
 
+def firestore_server_config_status():
+    backend = os.environ.get("DATABASE_BACKEND", "").strip().lower()
+    credentials_json = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON", "").strip()
+    credentials_path = os.environ.get("FIREBASE_SERVICE_ACCOUNT") or os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+    has_credentials = bool(credentials_json or credentials_path)
+    missing = []
+
+    if backend != "firestore" and not has_credentials:
+        missing.append("DATABASE_BACKEND=firestore")
+
+    if not has_credentials:
+        missing.append("FIREBASE_SERVICE_ACCOUNT_JSON ou FIREBASE_SERVICE_ACCOUNT")
+
+    return {
+        "enabled": use_firestore(),
+        "ready": use_firestore() and not missing,
+        "backend": backend or "sqlite",
+        "missing": missing,
+    }
+
+
 def get_firestore():
     global FIRESTORE
     if FIRESTORE is None:
@@ -134,7 +155,16 @@ def get_firestore():
     return FIRESTORE
 
 
-def firebase_web_config():
+FIREBASE_WEB_ENV_KEYS = {
+    "apiKey": "FIREBASE_WEB_API_KEY",
+    "authDomain": "FIREBASE_AUTH_DOMAIN",
+    "projectId": "FIREBASE_PROJECT_ID",
+    "appId": "FIREBASE_WEB_APP_ID",
+    "messagingSenderId": "FIREBASE_MESSAGING_SENDER_ID",
+}
+
+
+def firebase_web_config_status():
     config = {
         "apiKey": os.environ.get("FIREBASE_WEB_API_KEY", ""),
         "authDomain": os.environ.get("FIREBASE_AUTH_DOMAIN", ""),
@@ -142,7 +172,13 @@ def firebase_web_config():
         "appId": os.environ.get("FIREBASE_WEB_APP_ID", ""),
         "messagingSenderId": os.environ.get("FIREBASE_MESSAGING_SENDER_ID", ""),
     }
-    return {key: value for key, value in config.items() if value}
+    required_keys = ("apiKey", "authDomain", "projectId", "appId", "messagingSenderId")
+    missing = [FIREBASE_WEB_ENV_KEYS[key] for key in required_keys if not config.get(key)]
+    return {
+        "enabled": not missing,
+        "config": {key: value for key, value in config.items() if value},
+        "missing": missing,
+    }
 
 
 def get_firebase_admin_app():
@@ -1650,7 +1686,12 @@ class MnunesHandler(SimpleHTTPRequestHandler):
             return
 
         if parsed.path == "/api/health":
-            payload = {"ok": True, "database": "sqlite"}
+            firestore_status = firestore_server_config_status()
+            payload = {
+                "ok": True,
+                "database": "sqlite",
+                "firestore": firestore_status,
+            }
             if use_firestore():
                 store = get_firestore()
                 payload = {
@@ -1658,18 +1699,13 @@ class MnunesHandler(SimpleHTTPRequestHandler):
                     "database": "firestore",
                     "projectId": store.project_id,
                     "databaseId": store.database_id,
+                    "firestore": firestore_status,
                 }
             self.send_json(payload)
             return
 
         if parsed.path == "/api/firebase-config":
-            config = firebase_web_config()
-            self.send_json(
-                {
-                    "enabled": bool(config.get("apiKey") and config.get("authDomain") and config.get("appId")),
-                    "config": config,
-                }
-            )
+            self.send_json(firebase_web_config_status())
             return
 
         if parsed.path == "/api/users":

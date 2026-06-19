@@ -35,7 +35,13 @@ DATABASE_BACKEND=firestore
 FIREBASE_PROJECT_ID=mnunesnails
 FIREBASE_FIRESTORE_DATABASE=mnunesnails
 FIREBASE_SERVICE_ACCOUNT=firebase-service-account.json
+FIREBASE_WEB_API_KEY=<apiKey do app web Firebase>
+FIREBASE_AUTH_DOMAIN=mnunesnails.firebaseapp.com
+FIREBASE_WEB_APP_ID=<appId do app web Firebase>
+FIREBASE_MESSAGING_SENDER_ID=<messagingSenderId do app web Firebase>
 ```
+
+As variaveis `FIREBASE_WEB_*` ficam no Firebase Console em **Configuracoes do projeto > Geral > Seus apps > App da Web > Configuracao do SDK**. Elas sao publicas e usadas pelo navegador para enviar o codigo SMS. A conta de servico continua sendo necessaria no servidor para validar o codigo recebido.
 
 Na Render, configure as variaveis de ambiente assim:
 
@@ -44,6 +50,10 @@ DATABASE_BACKEND=firestore
 FIREBASE_PROJECT_ID=mnunesnails
 FIREBASE_FIRESTORE_DATABASE=mnunesnails
 FIREBASE_SERVICE_ACCOUNT_JSON=<conteudo completo do JSON da conta de servico>
+FIREBASE_WEB_API_KEY=<apiKey do app web Firebase>
+FIREBASE_AUTH_DOMAIN=mnunesnails.firebaseapp.com
+FIREBASE_WEB_APP_ID=<appId do app web Firebase>
+FIREBASE_MESSAGING_SENDER_ID=<messagingSenderId do app web Firebase>
 ```
 
 Com essas variaveis ativas, o `server.py` usa Firestore como banco principal.
@@ -53,6 +63,8 @@ Para confirmar o banco ativo no deploy, acesse:
 ```text
 /api/health
 ```
+
+No Render, a resposta precisa mostrar `"database": "firestore"`. Se mostrar `"database": "sqlite"`, os agendamentos estao sendo salvos no banco local temporario do servidor e as variaveis de ambiente Firebase precisam ser corrigidas.
 
 Colecoes principais:
 
