@@ -117,7 +117,9 @@ class ForbiddenError(Exception):
 def use_firestore():
     backend = os.environ.get("DATABASE_BACKEND", "").strip().lower()
     return backend == "firestore" or bool(
-        os.environ.get("FIREBASE_SERVICE_ACCOUNT") or os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+        os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON")
+        or os.environ.get("FIREBASE_SERVICE_ACCOUNT")
+        or os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
     )
 
 
@@ -1529,6 +1531,19 @@ class MnunesHandler(SimpleHTTPRequestHandler):
             self.send_json({"authenticated": bool(session), "session": session})
             return
 
+        if parsed.path == "/api/health":
+            payload = {"ok": True, "database": "sqlite"}
+            if use_firestore():
+                store = get_firestore()
+                payload = {
+                    "ok": True,
+                    "database": "firestore",
+                    "projectId": store.project_id,
+                    "databaseId": store.database_id,
+                }
+            self.send_json(payload)
+            return
+
         if parsed.path == "/api/users":
             session = self.require_session("admin")
             if session is None:
@@ -1854,8 +1869,23 @@ class MnunesHandler(SimpleHTTPRequestHandler):
         if length == 0:
             return {}
 
-        body = self.rfile.read(length).decode("utf-8")
-        return json.loads(body)
+        raw_body = self.rfile.read(length)
+        content_type = self.headers.get("Content-Type", "")
+        charset_match = re.search(r"charset=([^;]+)", content_type, flags=re.IGNORECASE)
+        encodings = []
+
+        if charset_match:
+            encodings.append(charset_match.group(1).strip())
+
+        encodings.extend(["utf-8", "latin-1"])
+
+        for encoding in dict.fromkeys(encodings):
+            try:
+                return json.loads(raw_body.decode(encoding))
+            except UnicodeDecodeError:
+                continue
+
+        return json.loads(raw_body.decode("utf-8", errors="replace"))
 
     def send_json(self, payload, status=200, cookies=None):
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")

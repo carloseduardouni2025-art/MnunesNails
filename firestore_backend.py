@@ -1,5 +1,7 @@
 import hashlib
 import hmac
+import base64
+import json
 import os
 import re
 import secrets
@@ -257,6 +259,7 @@ class FirestoreBackend:
 
         project_id = os.environ.get("FIREBASE_PROJECT_ID", "mnunesnails")
         database_id = os.environ.get("FIREBASE_FIRESTORE_DATABASE", "mnunesnails")
+        credentials_json = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON", "").strip()
         credentials_path = os.environ.get("FIREBASE_SERVICE_ACCOUNT") or os.environ.get(
             "GOOGLE_APPLICATION_CREDENTIALS"
         )
@@ -264,8 +267,24 @@ class FirestoreBackend:
         if credentials_path:
             credentials_path = str((root / credentials_path).resolve()) if not os.path.isabs(credentials_path) else credentials_path
 
+        if (
+            os.environ.get("DATABASE_BACKEND", "").strip().lower() == "firestore"
+            and not credentials_json
+            and not credentials_path
+        ):
+            raise RuntimeError(
+                "Configure FIREBASE_SERVICE_ACCOUNT_JSON ou FIREBASE_SERVICE_ACCOUNT para usar Firestore."
+            )
+
         if not firebase_admin._apps:
-            if credentials_path:
+            if credentials_json:
+                try:
+                    credentials_info = json.loads(credentials_json)
+                except json.JSONDecodeError:
+                    credentials_info = json.loads(base64.b64decode(credentials_json).decode("utf-8"))
+                cred = credentials.Certificate(credentials_info)
+                app = firebase_admin.initialize_app(cred, {"projectId": project_id})
+            elif credentials_path:
                 cred = credentials.Certificate(credentials_path)
                 app = firebase_admin.initialize_app(cred, {"projectId": project_id})
             else:

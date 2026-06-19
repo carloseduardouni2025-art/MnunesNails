@@ -37,7 +37,22 @@ FIREBASE_FIRESTORE_DATABASE=mnunesnails
 FIREBASE_SERVICE_ACCOUNT=firebase-service-account.json
 ```
 
+Na Render, configure as variaveis de ambiente assim:
+
+```text
+DATABASE_BACKEND=firestore
+FIREBASE_PROJECT_ID=mnunesnails
+FIREBASE_FIRESTORE_DATABASE=mnunesnails
+FIREBASE_SERVICE_ACCOUNT_JSON=<conteudo completo do JSON da conta de servico>
+```
+
 Com essas variaveis ativas, o `server.py` usa Firestore como banco principal.
+
+Para confirmar o banco ativo no deploy, acesse:
+
+```text
+/api/health
+```
 
 Colecoes principais:
 
@@ -52,6 +67,7 @@ Colecoes principais:
 Rotas principais:
 
 - `GET /api/auth/me`
+- `GET /api/health`
 - `POST /api/auth/register`
 - `POST /api/auth/login`
 - `POST /api/auth/admin-login`
