@@ -120,23 +120,14 @@ class ForbiddenError(Exception):
 
 
 def use_firestore():
-    backend = os.environ.get("DATABASE_BACKEND", "").strip().lower()
-    return backend == "firestore" or bool(
-        os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON")
-        or os.environ.get("FIREBASE_SERVICE_ACCOUNT")
-        or os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
-    )
+    return True
 
 
 def firestore_server_config_status():
-    backend = os.environ.get("DATABASE_BACKEND", "").strip().lower()
     credentials_json = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON", "").strip()
     credentials_path = os.environ.get("FIREBASE_SERVICE_ACCOUNT") or os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
     has_credentials = bool(credentials_json or credentials_path)
     missing = []
-
-    if backend != "firestore" and not has_credentials:
-        missing.append("DATABASE_BACKEND=firestore")
 
     if not has_credentials:
         missing.append("FIREBASE_SERVICE_ACCOUNT_JSON ou FIREBASE_SERVICE_ACCOUNT")
@@ -144,7 +135,7 @@ def firestore_server_config_status():
     return {
         "enabled": use_firestore(),
         "ready": use_firestore() and not missing,
-        "backend": backend or "sqlite",
+        "backend": "firestore",
         "missing": missing,
     }
 
@@ -154,15 +145,6 @@ def get_firestore():
     if FIRESTORE is None:
         FIRESTORE = firestore_backend.FirestoreBackend(ROOT)
     return FIRESTORE
-
-
-def disable_firestore_fallback(error):
-    global FIRESTORE
-    print(f"Firestore indisponivel. Usando SQLite local: {error}")
-    traceback.print_exc()
-    FIRESTORE = None
-    os.environ["DATABASE_BACKEND"] = "sqlite"
-    init_database()
 
 
 def firestore_runtime_status():
@@ -874,12 +856,7 @@ def create_session(actor_type, actor_id):
 
 def register_user(payload):
     if use_firestore():
-        try:
-            return get_firestore().register_user(payload)
-        except (AuthError, firestore_backend.AuthError, ValueError):
-            raise
-        except Exception as error:
-            disable_firestore_fallback(error)
+        return get_firestore().register_user(payload)
 
     name, phone, phone_normalized, whatsapp = validate_registration_payload(payload)
     password = validate_password_payload(payload)
@@ -900,12 +877,7 @@ def register_user(payload):
 
 def login_user(payload):
     if use_firestore():
-        try:
-            return get_firestore().login_user(payload)
-        except (AuthError, firestore_backend.AuthError, ValueError):
-            raise
-        except Exception as error:
-            disable_firestore_fallback(error)
+        return get_firestore().login_user(payload)
 
     phone = str(payload.get("phone", "")).strip()
     phone_normalized = normalize_phone(phone)
@@ -943,12 +915,7 @@ def recover_user_password(payload):
 
 def login_admin(payload):
     if use_firestore():
-        try:
-            return get_firestore().login_admin(payload)
-        except (AuthError, firestore_backend.AuthError, ValueError):
-            raise
-        except Exception as error:
-            disable_firestore_fallback(error)
+        return get_firestore().login_admin(payload)
 
     phone = str(payload.get("phone", "")).strip()
     phone_normalized = normalize_phone(phone)
@@ -1734,7 +1701,7 @@ class MnunesHandler(SimpleHTTPRequestHandler):
             firestore_status = firestore_runtime_status()
             payload = {
                 "ok": True,
-                "database": "sqlite",
+                "database": "firestore",
                 "firestore": firestore_status,
             }
             if firestore_status.get("ready") and use_firestore():
@@ -2155,21 +2122,17 @@ class MnunesHandler(SimpleHTTPRequestHandler):
 
 
 def main():
-    init_database()
     host = "0.0.0.0"
     port = int(os.environ.get("PORT", "5500"))
     server = ThreadingHTTPServer((host, port), MnunesHandler)
     print(f"Servidor em http://{host}:{port}/")
-    if use_firestore():
-        status = firestore_runtime_status()
-        print(
-            "Banco de dados Firestore: "
-            f"projeto={status.get('projectId', 'indisponivel')}, "
-            f"database={status.get('databaseId', 'indisponivel')}, "
-            f"ready={status.get('ready')}"
-        )
-    else:
-        print(f"Banco de dados em {DB_PATH}")
+    status = firestore_runtime_status()
+    print(
+        "Banco de dados Firestore: "
+        f"projeto={status.get('projectId', 'indisponivel')}, "
+        f"database={status.get('databaseId', 'indisponivel')}, "
+        f"ready={status.get('ready')}"
+    )
     server.serve_forever()
 
 

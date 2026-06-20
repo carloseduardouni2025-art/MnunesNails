@@ -308,11 +308,7 @@ class FirestoreBackend:
         if credentials_path:
             credentials_path = str((root / credentials_path).resolve()) if not os.path.isabs(credentials_path) else credentials_path
 
-        if (
-            os.environ.get("DATABASE_BACKEND", "").strip().lower() == "firestore"
-            and not credentials_json
-            and not credentials_path
-        ):
+        if not credentials_json and not credentials_path:
             raise RuntimeError(
                 "Configure FIREBASE_SERVICE_ACCOUNT_JSON ou FIREBASE_SERVICE_ACCOUNT para usar Firestore."
             )

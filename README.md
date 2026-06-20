@@ -1,6 +1,6 @@
 # MnunesNails
 
-Site de agendamento para manicure com suporte a Firestore e fallback local em SQLite.
+Site de agendamento para manicure usando Firestore/Firebase como banco de dados.
 
 ## Como rodar
 
@@ -18,9 +18,7 @@ http://localhost:5500/
 
 ## Banco de dados
 
-Por padrao, sem credenciais Firebase, o arquivo `mnunesnails.db` e criado automaticamente ao iniciar o servidor.
-
-Para usar o Firestore do projeto `mnunesnails`, instale as dependencias Python:
+O sistema usa apenas o Firestore do projeto `mnunesnails`. Instale as dependencias Python:
 
 ```powershell
 pip install -r requirements.txt
@@ -56,7 +54,7 @@ FIREBASE_WEB_APP_ID=<appId do app web Firebase>
 FIREBASE_MESSAGING_SENDER_ID=<messagingSenderId do app web Firebase>
 ```
 
-Com essas variaveis ativas, o `server.py` usa Firestore como banco principal.
+Com essas variaveis ativas, o `server.py` usa Firestore como banco unico do sistema.
 
 Para confirmar o banco ativo no deploy, acesse:
 
@@ -64,7 +62,7 @@ Para confirmar o banco ativo no deploy, acesse:
 /api/health
 ```
 
-No Render, a resposta precisa mostrar `"database": "firestore"`. Se mostrar `"database": "sqlite"`, os agendamentos estao sendo salvos no banco local temporario do servidor e as variaveis de ambiente Firebase precisam ser corrigidas.
+No Render, a resposta precisa mostrar `"database": "firestore"` e `"ready": true` dentro de `firestore`. Se `"ready"` estiver `false`, as variaveis de ambiente Firebase precisam ser corrigidas antes de usar cadastro, login e agendamentos.
 
 Colecoes principais:
 
