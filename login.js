@@ -144,23 +144,36 @@ async function requestJson(url, payload) {
     },
     body: JSON.stringify(payload)
   });
-  const result = await response.json();
+  const result = await readJsonResponse(response);
 
-  if (!response.ok) {
-    throw new Error(result.error || "Não foi possível entrar.");
+  if (!response.ok && result.error) {
+    throw new Error(result.error);
   }
 
+  if (!response.ok) {
+    throw new Error("Nao foi possivel concluir a solicitacao.");
+  }
   return result;
 }
 
 async function readJsonResponse(response) {
   const contentType = response.headers.get("Content-Type") || "";
+  const isJson = contentType.toLowerCase().includes("application/json");
+  const body = await response.text();
 
-  if (!contentType.toLowerCase().includes("application/json")) {
-    throw new Error("Abra o site pelo servidor Python do projeto para usar a recuperacao de senha.");
+  if (!body.trim()) {
+    throw new Error("O servidor nao retornou resposta. Confirme se o site esta aberto pelo servidor Python do projeto.");
   }
 
-  return response.json();
+  if (!isJson) {
+    throw new Error("Abra o site pelo servidor Python do projeto para usar login, cadastro e recuperacao de senha.");
+  }
+
+  try {
+    return JSON.parse(body);
+  } catch (error) {
+    throw new Error("O servidor retornou uma resposta invalida. Recarregue a pagina e tente novamente.");
+  }
 }
 
 async function loadFirebaseAuth() {
