@@ -155,6 +155,27 @@ def get_firestore():
     return FIRESTORE
 
 
+def firestore_runtime_status():
+    status = firestore_server_config_status()
+
+    if not use_firestore():
+        return status
+
+    try:
+        store = get_firestore()
+        status.update(
+            {
+                "ready": not status["missing"],
+                "projectId": store.project_id,
+                "databaseId": store.database_id,
+            }
+        )
+    except Exception as error:
+        status.update({"ready": False, "error": str(error)})
+
+    return status
+
+
 FIREBASE_WEB_ENV_KEYS = {
     "apiKey": "FIREBASE_WEB_API_KEY",
     "authDomain": "FIREBASE_AUTH_DOMAIN",
@@ -297,7 +318,6 @@ def ensure_column(connection, table, column, definition):
 
 def init_database():
     if use_firestore():
-        get_firestore().init_database()
         return
 
     with get_connection() as connection:
@@ -1686,19 +1706,18 @@ class MnunesHandler(SimpleHTTPRequestHandler):
             return
 
         if parsed.path == "/api/health":
-            firestore_status = firestore_server_config_status()
+            firestore_status = firestore_runtime_status()
             payload = {
                 "ok": True,
                 "database": "sqlite",
                 "firestore": firestore_status,
             }
-            if use_firestore():
-                store = get_firestore()
+            if firestore_status.get("ready") and use_firestore():
                 payload = {
                     "ok": True,
                     "database": "firestore",
-                    "projectId": store.project_id,
-                    "databaseId": store.database_id,
+                    "projectId": firestore_status.get("projectId"),
+                    "databaseId": firestore_status.get("databaseId"),
                     "firestore": firestore_status,
                 }
             self.send_json(payload)
@@ -2108,8 +2127,13 @@ def main():
     server = ThreadingHTTPServer((host, port), MnunesHandler)
     print(f"Servidor em http://{host}:{port}/")
     if use_firestore():
-        store = get_firestore()
-        print(f"Banco de dados Firestore: projeto={store.project_id}, database={store.database_id}")
+        status = firestore_runtime_status()
+        print(
+            "Banco de dados Firestore: "
+            f"projeto={status.get('projectId', 'indisponivel')}, "
+            f"database={status.get('databaseId', 'indisponivel')}, "
+            f"ready={status.get('ready')}"
+        )
     else:
         print(f"Banco de dados em {DB_PATH}")
     server.serve_forever()
