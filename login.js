@@ -176,7 +176,7 @@ async function readJsonResponse(response) {
   }
 
   if (!isJson) {
-    throw new Error("Abra o site pelo servidor Python do projeto para usar login, cadastro e recuperacao de senha.");
+    throw new Error("O servidor retornou uma resposta inesperada. Recarregue a pagina e tente novamente.");
   }
 
   try {
