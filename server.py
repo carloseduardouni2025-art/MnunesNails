@@ -2122,6 +2122,7 @@ class MnunesHandler(SimpleHTTPRequestHandler):
 
 
 def main():
+    init_database()
     host = "0.0.0.0"
     port = int(os.environ.get("PORT", "5500"))
     server = ThreadingHTTPServer((host, port), MnunesHandler)

@@ -41,6 +41,15 @@ FIREBASE_MESSAGING_SENDER_ID=<messagingSenderId do app web Firebase>
 
 As variaveis `FIREBASE_WEB_*` ficam no Firebase Console em **Configuracoes do projeto > Geral > Seus apps > App da Web > Configuracao do SDK**. Elas sao publicas e usadas pelo navegador para enviar o codigo SMS. A conta de servico continua sendo necessaria no servidor para validar o codigo recebido.
 
+Para criar/atualizar as colecoes iniciais no Firestore, rode:
+
+```powershell
+python tools/init_firestore.py
+```
+
+Esse comando cria o administrador padrao, os servicos iniciais e a janela de disponibilidade no banco Firebase configurado.
+O servidor tambem executa essa inicializacao automaticamente ao iniciar, entao um redeploy no Render com as variaveis Firebase corretas cria/atualiza as colecoes.
+
 Na Render, configure as variaveis de ambiente assim:
 
 ```text
