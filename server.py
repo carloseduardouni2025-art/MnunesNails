@@ -1724,17 +1724,26 @@ class MnunesHandler(SimpleHTTPRequestHandler):
             if session is None:
                 return
 
-            self.send_json({"users": list_users()})
+            try:
+                self.send_json({"users": list_users()})
+            except Exception as error:
+                self.send_internal_error(error)
             return
 
         if parsed.path == "/api/availability":
-            self.send_json({"availability": list_availability()})
+            try:
+                self.send_json({"availability": list_availability()})
+            except Exception as error:
+                self.send_internal_error(error)
             return
 
         if parsed.path == "/api/services":
-            session = self.current_session()
-            include_inactive = bool(session and session["role"] == "admin")
-            self.send_json({"services": list_services(include_inactive=include_inactive)})
+            try:
+                session = self.current_session()
+                include_inactive = bool(session and session["role"] == "admin")
+                self.send_json({"services": list_services(include_inactive=include_inactive)})
+            except Exception as error:
+                self.send_internal_error(error)
             return
 
         if parsed.path == "/api/appointments":
@@ -1743,7 +1752,10 @@ class MnunesHandler(SimpleHTTPRequestHandler):
                 return
 
             filters = self.get_filters(parsed)
-            self.send_json({"appointments": list_appointments(session, filters)})
+            try:
+                self.send_json({"appointments": list_appointments(session, filters)})
+            except Exception as error:
+                self.send_internal_error(error)
             return
 
         self.serve_static(parsed.path)
@@ -2010,14 +2022,17 @@ class MnunesHandler(SimpleHTTPRequestHandler):
         except ValueError as error:
             self.send_json({"error": str(error)}, status=400)
         except Exception as error:
-            traceback.print_exc()
-            self.send_json(
-                {
-                    "error": "Erro interno no servidor. Confira as variaveis do Firebase e tente novamente.",
-                    "details": str(error),
-                },
-                status=500,
-            )
+            self.send_internal_error(error)
+
+    def send_internal_error(self, error):
+        traceback.print_exc()
+        self.send_json(
+            {
+                "error": "Erro interno no servidor. Confira as variaveis do Firebase e tente novamente.",
+                "details": str(error),
+            },
+            status=500,
+        )
 
     def get_filters(self, parsed):
         query = parse_qs(parsed.query)

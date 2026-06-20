@@ -400,6 +400,19 @@ class FirestoreBackend:
         for service in DEFAULT_SERVICES:
             existing_current = self.query_one("services", "name", "==", service["name"])
             if existing_current:
+                self.save(
+                    "services",
+                    existing_current["id"],
+                    {
+                        "description": existing_current.get("description", service["description"]),
+                        "price": existing_current.get("price", service["price"]),
+                        "duration": existing_current.get("duration", service["duration"]),
+                        "is_active": existing_current.get("is_active", True),
+                        "created_at": existing_current.get("created_at", timestamp),
+                        "updated_at": existing_current.get("updated_at", timestamp),
+                    },
+                    merge=True,
+                )
                 continue
             legacy_name = service.get("legacy_name", service["name"])
             existing_legacy = self.query_one("services", "name", "==", legacy_name)
@@ -412,6 +425,8 @@ class FirestoreBackend:
                         "description": service["description"],
                         "price": service["price"],
                         "duration": service["duration"],
+                        "is_active": existing_legacy.get("is_active", True),
+                        "created_at": existing_legacy.get("created_at", timestamp),
                         "updated_at": timestamp,
                     },
                     merge=True,
@@ -457,26 +472,29 @@ class FirestoreBackend:
         return hashlib.sha1(f"{date_label}|{appointment_time}".encode("utf-8")).hexdigest()
 
     def row_to_user(self, row, appointment_count=0):
+        timestamp = now_iso()
         return {
             "id": row["id"],
             "name": row["name"],
             "phone": row["phone"],
             "whatsapp": row.get("whatsapp", ""),
             "appointmentCount": appointment_count,
-            "createdAt": row["created_at"],
-            "updatedAt": row["updated_at"],
+            "createdAt": row.get("created_at", timestamp),
+            "updatedAt": row.get("updated_at", timestamp),
         }
 
     def row_to_admin(self, row):
+        timestamp = now_iso()
         return {
             "id": row["id"],
             "name": row["name"],
             "phone": row["phone"],
-            "createdAt": row["created_at"],
-            "updatedAt": row["updated_at"],
+            "createdAt": row.get("created_at", timestamp),
+            "updatedAt": row.get("updated_at", timestamp),
         }
 
     def row_to_service(self, row, appointment_count=0):
+        timestamp = now_iso()
         return {
             "id": row["id"],
             "name": row["name"],
@@ -485,12 +503,13 @@ class FirestoreBackend:
             "duration": row.get("duration", ""),
             "isActive": bool(row.get("is_active", True)),
             "appointmentCount": appointment_count,
-            "createdAt": row["created_at"],
-            "updatedAt": row["updated_at"],
+            "createdAt": row.get("created_at", timestamp),
+            "updatedAt": row.get("updated_at", timestamp),
         }
 
     def row_to_appointment(self, row):
         user = self.find_user_by_id(row["user_id"]) or {}
+        timestamp = now_iso()
         return {
             "id": row["id"],
             "userId": row["user_id"],
@@ -502,8 +521,8 @@ class FirestoreBackend:
             "time": row["appointment_time"],
             "notes": row.get("notes", ""),
             "status": row["status"],
-            "createdAt": row["created_at"],
-            "updatedAt": row["updated_at"],
+            "createdAt": row.get("created_at", timestamp),
+            "updatedAt": row.get("updated_at", timestamp),
         }
 
     def find_user_by_phone(self, phone_normalized):
