@@ -14,11 +14,6 @@ const showLoginFromRecoverButton = document.getElementById("show-login-from-reco
 const sendRecoveryCodeButton = document.getElementById("send-recovery-code-button");
 const passwordToggleButtons = document.querySelectorAll("[data-password-toggle]");
 const params = new URLSearchParams(window.location.search);
-let firebaseAuth = null;
-let firebaseAuthSdk = null;
-let recoveryRecaptcha = null;
-let recoveryConfirmation = null;
-let recoveryIdToken = "";
 
 function nextUrl() {
   return params.get("next") === "booking" ? "index.html#agendamento" : "agendamentos.html";
@@ -56,7 +51,10 @@ function formPayload(form) {
 
 function registerPayload() {
   const payload = formPayload(clientRegisterForm);
-  payload.phone = payload.whatsapp;
+  if (payload.password !== payload.confirmPassword) {
+    throw new Error("As senhas nao conferem.");
+  }
+  delete payload.confirmPassword;
   return payload;
 }
 
@@ -67,46 +65,21 @@ function recoverPayload() {
     throw new Error("As senhas nao conferem.");
   }
 
-  if (!recoveryIdToken) {
-    throw new Error("Confirme o codigo SMS antes de atualizar a senha.");
+  if (!payload.smsCode) {
+    throw new Error("Informe o codigo de recuperacao recebido.");
   }
 
-  delete payload.confirmPassword;
-  delete payload.smsCode;
-  payload.firebaseIdToken = recoveryIdToken;
-  return payload;
-}
-
-function normalizePhoneDigits(phone) {
-  return String(phone || "").replace(/\D/g, "");
-}
-
-function phoneToE164(phone) {
-  const digits = normalizePhoneDigits(phone);
-
-  if (digits.startsWith("55") && (digits.length === 12 || digits.length === 13)) {
-    return `+${digits}`;
-  }
-
-  if (digits.length === 10 || digits.length === 11) {
-    return `+55${digits}`;
-  }
-
-  throw new Error("Informe um celular valido com DDD.");
+  return {
+    phone: payload.phone,
+    token: payload.smsCode,
+    newPassword: payload.password,
+  };
 }
 
 function hideClientForms() {
-  if (clientForm) {
-    clientForm.hidden = true;
-  }
-
-  if (clientRegisterForm) {
-    clientRegisterForm.hidden = true;
-  }
-
-  if (clientRecoverForm) {
-    clientRecoverForm.hidden = true;
-  }
+  if (clientForm) clientForm.hidden = true;
+  if (clientRegisterForm) clientRegisterForm.hidden = true;
+  if (clientRecoverForm) clientRecoverForm.hidden = true;
 }
 
 function showClientRegister() {
@@ -127,8 +100,6 @@ function showClientRecover() {
   hideClientForms();
   clientRecoverForm.hidden = false;
   clientRecoverFeedback.textContent = "";
-  recoveryIdToken = "";
-  recoveryConfirmation = null;
   clientRecoverForm.querySelector("input")?.focus();
 }
 
@@ -136,9 +107,7 @@ function togglePasswordVisibility(event) {
   const button = event.currentTarget;
   const input = button.closest(".password-field")?.querySelector("input");
 
-  if (!input) {
-    return;
-  }
+  if (!input) return;
 
   const shouldShow = input.type === "password";
   input.type = shouldShow ? "text" : "password";
@@ -146,133 +115,32 @@ function togglePasswordVisibility(event) {
   button.setAttribute("aria-label", shouldShow ? "Ocultar senha" : "Mostrar senha");
 }
 
-async function requestJson(url, payload) {
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(payload)
-  });
-  const result = await readJsonResponse(response);
-
-  if (!response.ok && result.error) {
-    throw new Error(result.error);
-  }
-
-  if (!response.ok) {
-    throw new Error("Nao foi possivel concluir a solicitacao.");
-  }
-  return result;
-}
-
-async function readJsonResponse(response) {
-  const contentType = response.headers.get("Content-Type") || "";
-  const isJson = contentType.toLowerCase().includes("application/json");
-  const body = await response.text();
-
-  if (!body.trim()) {
-    throw new Error("O servidor nao retornou resposta. Recarregue a pagina e tente novamente.");
-  }
-
-  if (!isJson) {
-    throw new Error("O servidor retornou uma resposta inesperada. Recarregue a pagina e tente novamente.");
-  }
-
-  try {
-    return JSON.parse(body);
-  } catch (error) {
-    throw new Error("O servidor retornou uma resposta invalida. Recarregue a pagina e tente novamente.");
-  }
-}
-
-async function loadFirebaseAuth() {
-  if (firebaseAuth && firebaseAuthSdk) {
-    return { auth: firebaseAuth, sdk: firebaseAuthSdk };
-  }
-
-  const response = await fetch("/api/firebase-config");
-  const result = await readJsonResponse(response);
-
-  if (!response.ok || !result.enabled) {
-    const missing = Array.isArray(result.missing) && result.missing.length
-      ? ` Variaveis faltando: ${result.missing.join(", ")}.`
-      : "";
-    if (missing) {
-      console.warn(`Firebase SMS nao configurado.${missing}`);
-    }
-    throw new Error("Recuperacao por SMS ainda nao esta disponivel. Fale com o studio para redefinir sua senha.");
-  }
-
-  const [{ initializeApp }, sdk] = await Promise.all([
-    import("https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js"),
-    import("https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js")
-  ]);
-
-  const app = initializeApp(result.config);
-  firebaseAuth = sdk.getAuth(app);
-  firebaseAuth.languageCode = "pt-BR";
-  firebaseAuthSdk = sdk;
-  return { auth: firebaseAuth, sdk: firebaseAuthSdk };
-}
-
-async function ensureRecoveryRecaptcha() {
-  const { auth, sdk } = await loadFirebaseAuth();
-
-  if (!recoveryRecaptcha) {
-    recoveryRecaptcha = new sdk.RecaptchaVerifier(auth, "recover-recaptcha", {
-      size: "normal"
-    });
-  }
-
-  return recoveryRecaptcha;
-}
-
 async function sendRecoveryCode() {
-  if (!clientRecoverForm) {
+  if (!clientRecoverForm) return;
+
+  const phone = clientRecoverForm.elements.phone.value.trim();
+  if (!phone) {
+    clientRecoverFeedback.textContent = "Informe o telefone cadastrado.";
     return;
   }
 
   sendRecoveryCodeButton.disabled = true;
-  clientRecoverFeedback.textContent = "Enviando codigo SMS...";
-  recoveryIdToken = "";
-  recoveryConfirmation = null;
+  clientRecoverFeedback.textContent = "Enviando codigo...";
 
   try {
-    const phone = phoneToE164(clientRecoverForm.elements.phone.value);
-    const { auth, sdk } = await loadFirebaseAuth();
-    const recaptcha = await ensureRecoveryRecaptcha();
-    recoveryConfirmation = await sdk.signInWithPhoneNumber(auth, phone, recaptcha);
-    clientRecoverFeedback.textContent = "Codigo enviado por SMS. Informe o codigo recebido.";
-    showToast("Codigo SMS enviado.");
-    clientRecoverForm.elements.smsCode.focus();
+    await apiFetch("/api/auth/request-recovery", {
+      method: "POST",
+      body: JSON.stringify({ phone }),
+    });
+    clientRecoverFeedback.textContent = "Codigo enviado. Verifique seu WhatsApp e preencha abaixo.";
+    showToast("Codigo enviado.");
+    clientRecoverForm.elements.smsCode?.focus();
   } catch (error) {
-    clientRecoverFeedback.textContent = friendlyErrorMessage(error, "Nao foi possivel enviar o codigo SMS.");
+    clientRecoverFeedback.textContent = friendlyErrorMessage(error, "Nao foi possivel enviar o codigo.");
     showToast(clientRecoverFeedback.textContent);
-
-    if (recoveryRecaptcha) {
-      recoveryRecaptcha.clear();
-      recoveryRecaptcha = null;
-    }
   } finally {
     sendRecoveryCodeButton.disabled = false;
   }
-}
-
-async function confirmRecoveryCode() {
-  const code = clientRecoverForm.elements.smsCode.value.trim();
-
-  if (!recoveryConfirmation) {
-    throw new Error("Envie o codigo SMS antes de atualizar a senha.");
-  }
-
-  if (!code) {
-    throw new Error("Informe o codigo recebido por SMS.");
-  }
-
-  const credential = await recoveryConfirmation.confirm(code);
-  recoveryIdToken = await credential.user.getIdToken();
-  return recoveryIdToken;
 }
 
 async function submitClientLogin(event) {
@@ -280,7 +148,11 @@ async function submitClientLogin(event) {
   clientFeedback.textContent = "Entrando...";
 
   try {
-    await requestJson("/api/auth/login", formPayload(clientForm));
+    const result = await apiFetch("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify(formPayload(clientForm)),
+    });
+    localStorage.setItem("authToken", result.token);
     showToast("Acesso liberado.");
     window.location.href = nextUrl();
   } catch (error) {
@@ -294,7 +166,12 @@ async function submitClientRegister(event) {
   clientRegisterFeedback.textContent = "Criando cadastro...";
 
   try {
-    await requestJson("/api/auth/register", registerPayload());
+    const payload = registerPayload();
+    const result = await apiFetch("/api/auth/register", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    localStorage.setItem("authToken", result.token);
     showToast("Cadastro criado.");
     window.location.href = nextUrl();
   } catch (error) {
@@ -305,15 +182,17 @@ async function submitClientRegister(event) {
 
 async function submitPasswordRecovery(event) {
   event.preventDefault();
-  clientRecoverFeedback.textContent = "Validando codigo SMS...";
+  clientRecoverFeedback.textContent = "Atualizando senha...";
 
   try {
-    await confirmRecoveryCode();
-    clientRecoverFeedback.textContent = "Atualizando senha...";
-    await requestJson("/api/auth/recover-password", recoverPayload());
+    const payload = recoverPayload();
+    await apiFetch("/api/auth/recover-password", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
     showToast("Senha atualizada. Entre com a nova senha.");
     showClientLogin();
-    clientForm.elements.phone.value = clientRecoverForm.elements.phone.value;
+    clientForm.elements.phone.value = payload.phone;
   } catch (error) {
     clientRecoverFeedback.textContent = friendlyErrorMessage(error);
     showToast(clientRecoverFeedback.textContent);
@@ -325,7 +204,11 @@ async function submitAdminLogin(event) {
   adminFeedback.textContent = "Entrando...";
 
   try {
-    await requestJson("/api/auth/admin-login", formPayload(adminForm));
+    const result = await apiFetch("/api/auth/admin-login", {
+      method: "POST",
+      body: JSON.stringify(formPayload(adminForm)),
+    });
+    localStorage.setItem("authToken", result.token);
     showToast("Acesso administrativo liberado.");
     window.location.href = "admin.html";
   } catch (error) {

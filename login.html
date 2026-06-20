@@ -32,8 +32,6 @@
           <p>Entre para acompanhar seus horarios no Studio MNunesnails.</p>
         </div>
 
-        <div class="auth-divider"><span>ou</span></div>
-
         <label>
           Celular
           <input type="tel" name="phone" placeholder="(11) 99999-9999" required autofocus>
@@ -66,8 +64,6 @@
           <p>Cadastre seus dados para acompanhar os agendamentos.</p>
         </div>
 
-        <div class="auth-divider"><span>ou</span></div>
-
         <label>
           Nome
           <input type="text" name="name" placeholder="Seu nome completo" required>
@@ -82,6 +78,14 @@
           Informe sua senha
           <span class="password-field">
             <input type="password" name="password" placeholder="Crie uma senha" required>
+            <button class="password-toggle" type="button" data-password-toggle aria-label="Mostrar senha">Ver</button>
+          </span>
+        </label>
+
+        <label>
+          Confirmar senha
+          <span class="password-field">
+            <input type="password" name="confirmPassword" placeholder="Repita a senha" required>
             <button class="password-toggle" type="button" data-password-toggle aria-label="Mostrar senha">Ver</button>
           </span>
         </label>
@@ -144,6 +148,7 @@
   </main>
 
   <div class="toast" id="site-toast" role="status" aria-live="polite"></div>
+  <script src="api.js"></script>
   <script src="login.js?v=20260619-4"></script>
 </body>
 </html>

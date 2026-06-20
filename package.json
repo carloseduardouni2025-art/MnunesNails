@@ -1,8 +1,7 @@
 {
   "name": "mnunesnails",
   "version": "1.0.0",
-  "description": "Site de agendamento para manicure com banco de dados local em SQLite.",
-  "main": "admin.js",
+  "description": "Sistema de agendamento online para o Studio MNunesnails.",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -13,15 +12,8 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
   "bugs": {
     "url": "https://github.com/carloseduardouni2025-art/MnunesNails/issues"
   },
-  "homepage": "https://github.com/carloseduardouni2025-art/MnunesNails#readme",
-  "dependencies": {
-    "dotenv": "^17.4.2",
-    "express": "^5.2.1",
-    "pg": "^8.21.0",
-    "typeorm": "^1.0.0"
-  }
+  "homepage": "https://github.com/carloseduardouni2025-art/MnunesNails#readme"
 }

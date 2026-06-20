@@ -1,15 +1,5 @@
-const dailySlots = {
-  1: ["08:00", "09:30", "11:00", "14:00", "15:30", "17:00"],
-  2: ["08:30", "10:00", "13:00", "14:30", "16:00", "18:00"],
-  3: ["09:00", "10:30", "12:00", "15:00", "16:30"],
-  4: ["08:00", "09:00", "11:30", "13:30", "17:30"],
-  5: ["08:00", "10:00", "12:30", "14:00", "16:00", "18:30"],
-  6: ["09:00", "10:00", "11:00", "13:00", "14:00"]
-};
-
-const weekdayFormatter = new Intl.DateTimeFormat("pt-BR", { weekday: "long" });
-const shortDateFormatter = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit" });
-const availability = buildAvailability();
+let availabilityData = [];
+let servicesData = [];
 
 const cardsContainer = document.getElementById("appointment-cards");
 const editor = document.getElementById("appointment-editor");
@@ -27,29 +17,9 @@ const logoutButton = document.getElementById("logout-button");
 const sessionBadge = document.getElementById("session-badge");
 const params = new URLSearchParams(window.location.search);
 
-let selectedId = params.get("appointment") || "";
+let selectedId = params.get("appointment") ? Number(params.get("appointment")) : null;
 let appointments = [];
 let currentUser = null;
-
-function buildAvailability() {
-  const dates = {};
-  const cursor = new Date();
-  cursor.setHours(0, 0, 0, 0);
-
-  while (Object.keys(dates).length < 6) {
-    const day = cursor.getDay();
-
-    if (dailySlots[day]) {
-      const weekday = weekdayFormatter.format(cursor);
-      const label = `${weekday.charAt(0).toUpperCase()}${weekday.slice(1)}, ${shortDateFormatter.format(cursor)}`;
-      dates[label] = dailySlots[day];
-    }
-
-    cursor.setDate(cursor.getDate() + 1);
-  }
-
-  return dates;
-}
 
 function escapeHtml(value) {
   return String(value || "")
@@ -67,80 +37,59 @@ function getStatusClass(status) {
     Pendente: "status-pendente",
     Cancelado: "status-cancelado"
   };
-
   return statusClasses[status] || "status-pendente";
 }
 
 function getDateParts(dateLabel) {
   const [weekday = "Dia", date = dateLabel || "--/--"] = String(dateLabel || "").split(", ");
-  return {
-    weekday,
-    date
-  };
+  return { weekday, date };
 }
 
 function showToast(message) {
-  if (!toast) {
-    return;
-  }
-
+  if (!toast) return;
   toast.textContent = message;
   toast.classList.add("show");
   window.clearTimeout(showToast.timeout);
-  showToast.timeout = window.setTimeout(() => {
-    toast.classList.remove("show");
-  }, 3200);
-}
-
-async function requestJson(url, options = {}) {
-  const response = await fetch(url, {
-    headers: {
-      "Content-Type": "application/json",
-      ...(options.headers || {})
-    },
-    ...options
-  });
-  const result = await response.json();
-
-  if (response.status === 401) {
-    window.location.href = "login.html";
-    throw new Error("Login necessário.");
-  }
-
-  if (!response.ok) {
-    throw new Error(result.error || "Não foi possível concluir a operação.");
-  }
-
-  return result;
+  showToast.timeout = window.setTimeout(() => toast.classList.remove("show"), 3200);
 }
 
 async function loadSession() {
-  const result = await requestJson("/api/auth/me");
-
-  if (!result.authenticated) {
+  if (!getToken()) {
     window.location.href = "login.html";
     return false;
   }
 
-  if (result.session.role === "admin") {
-    window.location.href = "admin.html";
+  try {
+    const user = await apiFetch("/api/auth/me");
+
+    if (!user || !user.id) {
+      window.location.href = "login.html";
+      return false;
+    }
+
+    if (user.role === "admin") {
+      window.location.href = "admin.html";
+      return false;
+    }
+
+    currentUser = user;
+    if (sessionBadge) sessionBadge.textContent = `Cliente · ${currentUser.name || currentUser.phone}`;
+    return true;
+  } catch {
+    window.location.href = "login.html";
     return false;
   }
-
-  currentUser = result.session.user;
-  sessionBadge.textContent = `Cliente · ${currentUser.name}`;
-  return true;
 }
 
 async function loadAppointments() {
   cardsContainer.innerHTML = "<div class='empty-state'>Carregando agendamentos...</div>";
 
   try {
-    const result = await requestJson("/api/appointments");
+    const result = await apiFetch("/api/appointments");
     appointments = result.appointments || [];
     renderAppointments();
 
-    const selected = appointments.find((appointment) => appointment.id === selectedId) || appointments[0];
+    const selected = appointments.find((a) => a.id === selectedId) || appointments[0];
 
     if (selected) {
       fillEditor(selected);
@@ -148,13 +97,15 @@ async function loadAppointments() {
       resetEditor();
     }
   } catch (error) {
-    cardsContainer.innerHTML = `<div class="empty-state">${escapeHtml(error.message)}</div>`;
+    cardsContainer.innerHTML = `<div class="empty-state">${escapeHtml(error?.message || "Erro ao carregar agendamentos.")}</div>`;
     resetEditor();
   }
 }
 
 function populateDateOptions(selectedDate = "") {
-  const dates = Object.keys(availability);
+  const dates = availabilityData
+    .filter((group) => group.slots.some((s) => s.isAvailable))
+    .map((group) => group.date);
 
   if (selectedDate && !dates.includes(selectedDate)) {
     dates.unshift(selectedDate);
@@ -166,7 +117,8 @@ function populateDateOptions(selectedDate = "") {
 }
 
 function populateTimeOptions(date, selectedTime = "") {
-  const slots = [...(availability[date] || [])];
+  const group = availabilityData.find((g) => g.date === date);
+  const slots = group ? group.slots.filter((s) => s.isAvailable).map((s) => s.time) : [];
 
   if (selectedTime && !slots.includes(selectedTime)) {
     slots.unshift(selectedTime);
@@ -176,76 +128,58 @@ function populateTimeOptions(date, selectedTime = "") {
     .map((time) => `<option value="${escapeHtml(time)}">${escapeHtml(time)}</option>`)
     .join("");
 
-  if (selectedTime) {
-    editorTime.value = selectedTime;
-  }
+  if (selectedTime) editorTime.value = selectedTime;
+}
+
+function populateServiceOptions(selectedService = "") {
+  const editorService = document.getElementById("editor-service");
+  if (!editorService) return;
+  editorService.innerHTML = servicesData
+    .filter((s) => s.isActive !== false)
+    .map((s) => `<option value="${escapeHtml(s.name)}">${escapeHtml(s.name)}</option>`)
+    .join("");
+  if (selectedService) editorService.value = selectedService;
 }
 
 function getFilteredAppointments() {
   const filter = statusFilter.value;
   const searchTerm = searchInput.value.trim().toLowerCase();
-  let filteredAppointments = appointments;
+  let filtered = appointments;
 
   if (filter !== "Todos") {
-    filteredAppointments = filteredAppointments.filter((appointment) => appointment.status === filter);
+    filtered = filtered.filter((a) => a.status === filter);
   }
 
-  if (!searchTerm) {
-    return filteredAppointments;
-  }
+  if (!searchTerm) return filtered;
 
-  return filteredAppointments.filter((appointment) => {
-    const searchable = [
-      appointment.name,
-      appointment.phone,
-      appointment.service,
-      appointment.date,
-      appointment.status
-    ].join(" ").toLowerCase();
-
-    return searchable.includes(searchTerm);
-  });
+  return filtered.filter((a) =>
+    [a.name, a.phone, a.service, a.date, a.status].join(" ").toLowerCase().includes(searchTerm)
+  );
 }
 
 function renderMetrics() {
-  const confirmed = appointments.filter((appointment) => appointment.status === "Confirmado").length;
-  const changed = appointments.filter((appointment) => appointment.status === "Alterado").length;
-  const canceled = appointments.filter((appointment) => appointment.status === "Cancelado").length;
+  const confirmed = appointments.filter((a) => a.status === "Confirmado").length;
+  const changed = appointments.filter((a) => a.status === "Alterado").length;
+  const canceled = appointments.filter((a) => a.status === "Cancelado").length;
 
   metrics.innerHTML = `
-    <div>
-      <strong>${appointments.length}</strong>
-      <span>Total</span>
-    </div>
-    <div>
-      <strong>${confirmed}</strong>
-      <span>Confirmados</span>
-    </div>
-    <div>
-      <strong>${changed}</strong>
-      <span>Alterados</span>
-    </div>
-    <div>
-      <strong>${canceled}</strong>
-      <span>Cancelados</span>
-    </div>
+    <div><strong>${appointments.length}</strong><span>Total</span></div>
+    <div><strong>${confirmed}</strong><span>Confirmados</span></div>
+    <div><strong>${changed}</strong><span>Alterados</span></div>
+    <div><strong>${canceled}</strong><span>Cancelados</span></div>
   `;
 }
 
 function renderAppointments() {
-  const filteredAppointments = getFilteredAppointments();
+  const filtered = getFilteredAppointments();
   renderMetrics();
 
-  if (!filteredAppointments.length) {
-    cardsContainer.innerHTML = `
-      <div class="empty-state">
-        Nenhum agendamento encontrado. Crie um novo horário para ele aparecer aqui.
-      </div>
-    `;
+  if (!filtered.length) {
+    cardsContainer.innerHTML = `<div class="empty-state">Nenhum agendamento encontrado. Crie um novo horário para ele aparecer aqui.</div>`;
     return;
   }
 
-  cardsContainer.innerHTML = filteredAppointments
+  cardsContainer.innerHTML = filtered
     .map((appointment) => {
       const dateParts = getDateParts(appointment.date);
       const notes = appointment.notes
@@ -253,7 +187,7 @@ function renderAppointments() {
         : "";
 
       return `
-        <article class="appointment-card ${appointment.id === selectedId ? "active" : ""}" role="button" tabindex="0" data-id="${escapeHtml(appointment.id)}" data-status="${escapeHtml(appointment.status)}">
+        <article class="appointment-card ${appointment.id === selectedId ? "active" : ""}" role="button" tabindex="0" data-id="${appointment.id}" data-status="${escapeHtml(appointment.status)}">
           <span class="appointment-date-badge">
             <strong>${escapeHtml(dateParts.date)}</strong>
             <span>${escapeHtml(dateParts.weekday)}</span>
@@ -276,19 +210,19 @@ function renderAppointments() {
 
 function setEditorDisabled(isDisabled) {
   Array.from(editor.elements).forEach((element) => {
-    if (element.type !== "hidden") {
-      element.disabled = isDisabled;
-    }
+    if (element.type !== "hidden") element.disabled = isDisabled;
   });
   duplicateButton.disabled = isDisabled;
   cancelButton.disabled = isDisabled;
 }
 
 function resetEditor() {
-  selectedId = "";
+  selectedId = null;
   editor.reset();
+  populateServiceOptions();
   populateDateOptions();
-  populateTimeOptions(Object.keys(availability)[0]);
+  const firstDate = availabilityData.find((g) => g.slots.some((s) => s.isAvailable))?.date || "";
+  populateTimeOptions(firstDate);
   editorTitle.textContent = "Selecione um agendamento";
   editorFeedback.textContent = "";
   setEditorDisabled(true);
@@ -297,6 +231,7 @@ function resetEditor() {
 
 function fillEditor(appointment) {
   selectedId = appointment.id;
+  populateServiceOptions(appointment.service);
   populateDateOptions(appointment.date);
   populateTimeOptions(appointment.date, appointment.time);
 
@@ -304,7 +239,6 @@ function fillEditor(appointment) {
   editor.elements.id.value = appointment.id;
   editor.elements.name.value = appointment.name;
   editor.elements.phone.value = appointment.phone;
-  editor.elements.service.value = appointment.service;
   editor.elements.status.value = appointment.status;
   editor.elements.notes.value = appointment.notes || "";
   editorDate.value = appointment.date;
@@ -325,9 +259,6 @@ async function updateAppointment(event) {
 
   const formData = new FormData(editor);
   const payload = {
-    name: formData.get("name").toString().trim(),
-    phone: formData.get("phone").toString().trim(),
-    service: formData.get("service").toString(),
     date: formData.get("date").toString(),
     time: formData.get("time").toString(),
     status: formData.get("status").toString(),
@@ -336,22 +267,18 @@ async function updateAppointment(event) {
 
   try {
     editorFeedback.textContent = "Salvando alterações...";
-    const result = await requestJson(`/api/appointments/${selectedId}`, {
+    const result = await apiFetch(`/api/appointments/${selectedId}`, {
       method: "PUT",
       body: JSON.stringify(payload)
     });
-    const index = appointments.findIndex((appointment) => appointment.id === selectedId);
-
-    if (index >= 0) {
-      appointments[index] = result.appointment;
-    }
-
+    const index = appointments.findIndex((a) => a.id === selectedId);
+    if (index >= 0) appointments[index] = result.appointment;
     fillEditor(result.appointment);
     editorFeedback.textContent = "Agendamento atualizado.";
     showToast("Agendamento atualizado.");
   } catch (error) {
-    editorFeedback.textContent = error.message;
-    showToast(error.message);
+    editorFeedback.textContent = error?.message || "Erro ao atualizar agendamento.";
+    showToast(error?.message || "Erro ao atualizar agendamento.");
   }
 }
 
@@ -363,16 +290,14 @@ async function duplicateAppointment() {
 
   try {
     editorFeedback.textContent = "Criando cópia...";
-    const result = await requestJson(`/api/appointments/${selectedId}/duplicate`, {
-      method: "POST"
-    });
+    const result = await apiFetch(`/api/appointments/${selectedId}/duplicate`, { method: "POST" });
     appointments.unshift(result.appointment);
     fillEditor(result.appointment);
     editorFeedback.textContent = "Cópia criada como pendente.";
     showToast("Cópia criada como pendente.");
   } catch (error) {
-    editorFeedback.textContent = error.message;
-    showToast(error.message);
+    editorFeedback.textContent = error?.message || "Erro ao duplicar agendamento.";
+    showToast(error?.message || "Erro ao duplicar agendamento.");
   }
 }
 
@@ -382,7 +307,7 @@ async function cancelAppointment() {
     return;
   }
 
-  const current = appointments.find((appointment) => appointment.id === selectedId);
+  const current = appointments.find((a) => a.id === selectedId);
 
   if (current?.status === "Cancelado") {
     editorFeedback.textContent = "Este agendamento já está cancelado.";
@@ -391,77 +316,73 @@ async function cancelAppointment() {
 
   try {
     editorFeedback.textContent = "Cancelando agendamento...";
-    const result = await requestJson(`/api/appointments/${selectedId}/cancel`, {
-      method: "POST"
-    });
-    const index = appointments.findIndex((appointment) => appointment.id === selectedId);
-
-    if (index >= 0) {
-      appointments[index] = result.appointment;
-    }
-
+    const result = await apiFetch(`/api/appointments/${selectedId}/cancel`, { method: "POST" });
+    const index = appointments.findIndex((a) => a.id === selectedId);
+    if (index >= 0) appointments[index] = result.appointment;
     fillEditor(result.appointment);
     editorFeedback.textContent = "Agendamento cancelado.";
     showToast("Agendamento cancelado.");
   } catch (error) {
-    editorFeedback.textContent = error.message;
-    showToast(error.message);
+    editorFeedback.textContent = error?.message || "Erro ao cancelar agendamento.";
+    showToast(error?.message || "Erro ao cancelar agendamento.");
   }
 }
 
 cardsContainer.addEventListener("click", (event) => {
   const card = event.target.closest(".appointment-card");
-
-  if (!card) {
-    return;
-  }
-
-  const appointment = appointments.find((item) => item.id === card.dataset.id);
-
-  if (appointment) {
-    fillEditor(appointment);
-  }
+  if (!card) return;
+  const appointment = appointments.find((a) => a.id === Number(card.dataset.id));
+  if (appointment) fillEditor(appointment);
 });
 
 cardsContainer.addEventListener("keydown", (event) => {
-  if (event.key !== "Enter" && event.key !== " ") {
-    return;
-  }
-
+  if (event.key !== "Enter" && event.key !== " ") return;
   const card = event.target.closest(".appointment-card");
-
-  if (!card) {
-    return;
-  }
-
+  if (!card) return;
   event.preventDefault();
-  const appointment = appointments.find((item) => item.id === card.dataset.id);
-
-  if (appointment) {
-    fillEditor(appointment);
-  }
+  const appointment = appointments.find((a) => a.id === Number(card.dataset.id));
+  if (appointment) fillEditor(appointment);
 });
 
-editorDate.addEventListener("change", () => {
-  populateTimeOptions(editorDate.value);
-});
-
+editorDate.addEventListener("change", () => populateTimeOptions(editorDate.value));
 statusFilter.addEventListener("change", renderAppointments);
 searchInput.addEventListener("input", renderAppointments);
 editor.addEventListener("submit", updateAppointment);
 duplicateButton.addEventListener("click", duplicateAppointment);
 cancelButton.addEventListener("click", cancelAppointment);
+
 logoutButton.addEventListener("click", async () => {
-  await requestJson("/api/auth/logout", { method: "POST" });
+  try {
+    await apiFetch("/api/auth/logout", { method: "POST" });
+  } catch {
+    // ignore logout errors
+  }
+  localStorage.removeItem("authToken");
   window.location.href = "login.html";
 });
 
-populateDateOptions();
-populateTimeOptions(Object.keys(availability)[0]);
-resetEditor();
+async function loadAvailability() {
+  try {
+    const result = await apiFetch("/api/availability");
+    availabilityData = result.availability || [];
+  } catch {
+    availabilityData = [];
+  }
+}
 
-loadSession().then((isAuthenticated) => {
+async function loadServices() {
+  try {
+    const result = await apiFetch("/api/services");
+    servicesData = result.services || [];
+  } catch {
+    servicesData = [];
+  }
+}
+
+loadSession().then(async (isAuthenticated) => {
   if (isAuthenticated) {
+    await Promise.all([loadAvailability(), loadServices()]);
+    resetEditor();
     loadAppointments();
   }
 });

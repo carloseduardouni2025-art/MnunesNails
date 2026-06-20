@@ -1,15 +1,3 @@
-const dailySlots = {
-  1: ["08:00", "09:30", "11:00", "14:00", "15:30", "17:00"],
-  2: ["08:30", "10:00", "13:00", "14:30", "16:00", "18:00"],
-  3: ["09:00", "10:30", "12:00", "15:00", "16:30"],
-  4: ["08:00", "09:00", "11:30", "13:30", "17:30"],
-  5: ["08:00", "10:00", "12:30", "14:00", "16:00", "18:30"],
-  6: ["09:00", "10:00", "11:00", "13:00", "14:00"]
-};
-
-const weekdayFormatter = new Intl.DateTimeFormat("pt-BR", { weekday: "long" });
-const shortDateFormatter = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit" });
-
 let availability = {};
 
 const form = document.getElementById("booking-form");
@@ -33,6 +21,7 @@ let isSaving = false;
 let currentUser = null;
 let servicesSignature = "";
 let isBookingDatePickerOpen = false;
+let servicesById = {};
 
 function storeBookingDraft() {
   sessionStorage.setItem(BOOKING_DRAFT_KEY, JSON.stringify(getAppointmentPayload()));
@@ -49,10 +38,7 @@ function redirectToRegister() {
 }
 
 function requireAuthenticatedUser() {
-  if (currentUser) {
-    return true;
-  }
-
+  if (currentUser) return true;
   redirectToRegister();
   return false;
 }
@@ -83,18 +69,9 @@ function getAvailabilityDateParts(dateLabel) {
   const [weekday = "", date = ""] = String(dateLabel || "").split(", ");
   const [day = "--", month = ""] = date.split("/");
   const monthNames = {
-    "01": "jan.",
-    "02": "fev.",
-    "03": "mar.",
-    "04": "abr.",
-    "05": "mai.",
-    "06": "jun.",
-    "07": "jul.",
-    "08": "ago.",
-    "09": "set.",
-    "10": "out.",
-    "11": "nov.",
-    "12": "dez."
+    "01": "jan.", "02": "fev.", "03": "mar.", "04": "abr.",
+    "05": "mai.", "06": "jun.", "07": "jul.", "08": "ago.",
+    "09": "set.", "10": "out.", "11": "nov.", "12": "dez."
   };
 
   return {
@@ -107,15 +84,9 @@ function getAvailabilityDateParts(dateLabel) {
 function getWeekdayColumn(dateLabel) {
   const [weekday = ""] = String(dateLabel || "").split(", ");
   const columns = {
-    Domingo: 0,
-    "Segunda-feira": 1,
-    "Terca-feira": 2,
-    "Quarta-feira": 3,
-    "Quinta-feira": 4,
-    "Sexta-feira": 5,
-    Sabado: 6
+    Domingo: 0, "Segunda-feira": 1, "Terca-feira": 2, "Quarta-feira": 3,
+    "Quinta-feira": 4, "Sexta-feira": 5, Sabado: 6
   };
-
   return columns[weekday] || 0;
 }
 
@@ -127,9 +98,7 @@ function updateDatePickerTrigger() {
 function renderBookingDatePicker() {
   document.querySelector(".booking-date-dialog")?.remove();
 
-  if (!isBookingDatePickerOpen) {
-    return;
-  }
+  if (!isBookingDatePickerOpen) return;
 
   const dates = Object.keys(availability);
   const monthGroups = [];
@@ -167,13 +136,8 @@ function renderBookingDatePicker() {
           <section class="date-dialog-month">
             <h4>${escapeHtml(monthGroup.month)}</h4>
             <div class="date-dialog-weekdays" aria-hidden="true">
-              <span>DOM</span>
-              <span>SEG</span>
-              <span>TER</span>
-              <span>QUA</span>
-              <span>QUI</span>
-              <span>SEX</span>
-              <span>SAB</span>
+              <span>DOM</span><span>SEG</span><span>TER</span><span>QUA</span>
+              <span>QUI</span><span>SEX</span><span>SAB</span>
             </div>
             <div class="date-dialog-grid">
               ${Array.from({ length: getWeekdayColumn(monthGroup.dates[0]) }).map(() => `
@@ -182,7 +146,6 @@ function renderBookingDatePicker() {
               ${monthGroup.dates.map((dateLabel) => {
                 const dateParts = getAvailabilityDateParts(dateLabel);
                 const isActive = dateLabel === dateSelect.value;
-
                 return `
                   <button
                     class="date-dialog-day ${isActive ? "active" : ""}"
@@ -210,6 +173,7 @@ function closeBookingDatePicker() {
 
 function renderServices(services) {
   const selectedService = serviceSelect.value;
+  servicesById = {};
   servicesGrid.dataset.count = String(services.length);
 
   if (!services.length) {
@@ -219,35 +183,39 @@ function renderServices(services) {
     return;
   }
 
-  const maxAppointments = Math.max(...services.map((service) => Number(service.appointmentCount || 0)));
+  const activeServices = services.filter((s) => s.isActive !== false);
+  const maxAppointments = Math.max(...activeServices.map((service) => Number(service.appointmentCount || 0)));
   const mostBookedIndex = maxAppointments > 0
-    ? services.findIndex((service) => Number(service.appointmentCount || 0) === maxAppointments)
+    ? activeServices.findIndex((service) => Number(service.appointmentCount || 0) === maxAppointments)
     : 0;
 
-  servicesGrid.innerHTML = services
-    .map((service, index) => `
-      <article class="service-card ${index === mostBookedIndex ? "featured" : ""}" data-service="${escapeHtml(service.name)}">
-        ${index === mostBookedIndex ? '<p class="service-tag">Mais pedido</p>' : ""}
-        <h3>${escapeHtml(service.name)}</h3>
-        <p>${escapeHtml(service.description || "Atendimento personalizado para cuidar das suas unhas.")}</p>
-        <div class="service-meta">
-          <strong>${escapeHtml(service.price || "Consultar")}</strong>
-          <span>${escapeHtml(service.duration || "Sob medida")}</span>
-        </div>
-        <button class="service-select-button" type="button">Selecionar</button>
-      </article>
-    `)
+  servicesGrid.innerHTML = activeServices
+    .map((service, index) => {
+      servicesById[service.name] = service.id;
+      return `
+        <article class="service-card ${index === mostBookedIndex ? "featured" : ""}" data-service="${escapeHtml(service.name)}">
+          ${index === mostBookedIndex ? '<p class="service-tag">Mais pedido</p>' : ""}
+          <h3>${escapeHtml(service.name)}</h3>
+          <p>${escapeHtml(service.description || "Atendimento personalizado para cuidar das suas unhas.")}</p>
+          <div class="service-meta">
+            <strong>${escapeHtml(service.price || "Consultar")}</strong>
+            <span>${escapeHtml(service.duration || "Sob medida")}</span>
+          </div>
+          <button class="service-select-button" type="button">Selecionar</button>
+        </article>
+      `;
+    })
     .join("");
 
   serviceSelect.innerHTML = '<option value="">Selecione um servico</option>';
-  services.forEach((service) => {
+  activeServices.forEach((service) => {
     const option = document.createElement("option");
     option.value = service.name;
     option.textContent = service.name;
     serviceSelect.appendChild(option);
   });
 
-  if (selectedService && services.some((service) => service.name === selectedService)) {
+  if (selectedService && activeServices.some((service) => service.name === selectedService)) {
     serviceSelect.value = selectedService;
   }
 
@@ -256,38 +224,19 @@ function renderServices(services) {
 }
 
 async function loadServices({ silent = false } = {}) {
-  if (!servicesGrid) {
-    return;
-  }
+  if (!servicesGrid) return;
 
   try {
-    const response = await fetch("/api/services");
-    const result = await response.json();
-
-    if (!response.ok) {
-      throw new Error(result.error || "Nao foi possivel carregar os servicos.");
-    }
-
+    const result = await apiFetch("/api/services");
     const services = result.services || [];
-    const nextSignature = JSON.stringify(
-      services.map((service) => ({
-        id: service.id,
-        name: service.name,
-        description: service.description,
-        price: service.price,
-        duration: service.duration,
-        appointmentCount: service.appointmentCount
-      }))
-    );
+    const nextSignature = JSON.stringify(services.map((s) => s.id));
 
     if (nextSignature !== servicesSignature) {
       servicesSignature = nextSignature;
       renderServices(services);
     }
   } catch (error) {
-    if (!silent) {
-      showToast(error.message);
-    }
+    if (!silent) showToast(error?.message || "Nao foi possivel carregar os servicos.");
   }
 }
 
@@ -313,11 +262,8 @@ function renderTimeSlots(date) {
     }
 
     button.addEventListener("click", () => {
-      if (button.disabled) {
-        return;
-      }
-
-      document.querySelectorAll(".time-slot").forEach((slot) => slot.classList.remove("active"));
+      if (button.disabled) return;
+      document.querySelectorAll(".time-slot").forEach((s) => s.classList.remove("active"));
       button.classList.add("active");
       selectedTime = slot.time;
       updateSummary();
@@ -330,18 +276,13 @@ function renderTimeSlots(date) {
 }
 
 function selectTimeSlot(time) {
-  if (!time) {
-    return;
-  }
+  if (!time) return;
 
   const buttons = document.querySelectorAll(".time-slot");
   buttons.forEach((button) => {
     const isSelected = button.textContent.trim() === time;
     button.classList.toggle("active", isSelected && !button.disabled);
-
-    if (isSelected && !button.disabled) {
-      selectedTime = time;
-    }
+    if (isSelected && !button.disabled) selectedTime = time;
   });
 
   updateSummary();
@@ -349,23 +290,17 @@ function selectTimeSlot(time) {
 
 function restoreBookingDraft() {
   const rawDraft = sessionStorage.getItem(BOOKING_DRAFT_KEY);
-
-  if (!rawDraft) {
-    return;
-  }
+  if (!rawDraft) return;
 
   let draft;
-
   try {
     draft = JSON.parse(rawDraft);
-  } catch (error) {
+  } catch {
     clearBookingDraft();
     return;
   }
 
-  if (!currentUser) {
-    return;
-  }
+  if (!currentUser) return;
 
   form.elements.service.value = draft.service || "";
   form.elements.notes.value = draft.notes || "";
@@ -384,20 +319,12 @@ function restoreBookingDraft() {
 
 async function loadAvailability() {
   try {
-    const response = await fetch("/api/availability");
-    const result = await response.json();
-
-    if (!response.ok) {
-      throw new Error(result.error || "Nao foi possivel carregar os horarios.");
-    }
-
+    const result = await apiFetch("/api/availability");
     availability = {};
+
     (result.availability || []).forEach((dateGroup) => {
       const freeSlots = dateGroup.slots.filter((slot) => slot.isAvailable);
-
-      if (freeSlots.length) {
-        availability[dateGroup.date] = freeSlots;
-      }
+      if (freeSlots.length) availability[dateGroup.date] = freeSlots;
     });
 
     const previousDate = dateSelect.value;
@@ -412,41 +339,41 @@ async function loadAvailability() {
       renderTimeSlots("");
     }
   } catch (error) {
-    timeSlots.innerHTML = `<p class='empty-state'>${error.message}</p>`;
+    timeSlots.innerHTML = `<p class='empty-state'>${error?.message || "Nao foi possivel carregar os horarios."}</p>`;
   }
 }
 
 function showToast(message) {
-  if (!toast) {
-    return;
-  }
-
+  if (!toast) return;
   toast.textContent = message;
   toast.classList.add("show");
   window.clearTimeout(showToast.timeout);
-  showToast.timeout = window.setTimeout(() => {
-    toast.classList.remove("show");
-  }, 3200);
+  showToast.timeout = window.setTimeout(() => toast.classList.remove("show"), 3200);
 }
 
 async function loadCurrentUser() {
-  try {
-    const response = await fetch("/api/auth/me");
-    const result = await response.json();
+  if (!getToken()) {
+    currentUser = null;
+    return;
+  }
 
-    if (!response.ok || !result.authenticated || result.session?.role !== "user") {
+  try {
+    const user = await apiFetch("/api/auth/me");
+
+    if (!user || !user.id) {
+      currentUser = null;
       return;
     }
 
-    currentUser = result.session.user;
+    currentUser = user;
     form.elements.name.value = currentUser.name || "";
-    form.elements.phone.value = currentUser.whatsapp || currentUser.phone || "";
+    form.elements.phone.value = currentUser.phone || "";
     form.elements.name.readOnly = true;
     form.elements.phone.readOnly = true;
     form.elements.name.closest("label")?.classList.add("field-prefilled");
     form.elements.phone.closest("label")?.classList.add("field-prefilled");
     updateSummary();
-  } catch (error) {
+  } catch {
     currentUser = null;
   }
 }
@@ -455,12 +382,7 @@ function setSavingState(isActive) {
   isSaving = isActive;
   submitButton.disabled = isActive;
   whatsappLink.setAttribute("aria-busy", isActive ? "true" : "false");
-
-  if (isActive) {
-    submitButton.textContent = "Salvando...";
-  } else {
-    submitButton.textContent = "Confirmar agendamento";
-  }
+  submitButton.textContent = isActive ? "Salvando..." : "Confirmar agendamento";
 }
 
 function updateBookingSteps(hasInfo, hasService, hasTime) {
@@ -470,7 +392,6 @@ function updateBookingSteps(hasInfo, hasService, hasTime) {
       (stepName === "info" && hasInfo) ||
       (stepName === "service" && hasService) ||
       (stepName === "time" && hasTime);
-
     step.classList.toggle("done", isDone);
     step.classList.remove("active");
   });
@@ -514,24 +435,22 @@ function updateSummary() {
 
   const text = encodeURIComponent(
     `Olá! Quero confirmar meu agendamento no Studio MNunesnails.\n` +
-    `Nome: ${name}\n` +
-    `WhatsApp: ${phone}\n` +
-    `Serviço: ${service}\n` +
-    `Data: ${date}\n` +
-    `Horário: ${selectedTime || "-"}\n` +
-    `Observações: ${notes}`
+    `Nome: ${name}\nWhatsApp: ${phone}\nServiço: ${service}\n` +
+    `Data: ${date}\nHorário: ${selectedTime || "-"}\nObservações: ${notes}`
   );
 
-  whatsappLink.href = hasEnoughData ? `https://wa.me/5511999999999?text=${text}` : "#";
+  whatsappLink.href = `https://wa.me/?text=${text}`;
   whatsappLink.setAttribute("aria-disabled", hasEnoughData ? "false" : "true");
 }
 
 function getAppointmentPayload() {
   const formData = new FormData(form);
+  const serviceName = formData.get("service").toString().trim();
   return {
     name: formData.get("name").toString().trim(),
     phone: formData.get("phone").toString().trim(),
-    service: formData.get("service").toString().trim(),
+    service: serviceName,
+    service_id: servicesById[serviceName] || null,
     date: formData.get("date").toString().trim(),
     time: selectedTime,
     notes: formData.get("notes").toString().trim()
@@ -539,52 +458,37 @@ function getAppointmentPayload() {
 }
 
 async function saveAppointment() {
-  if (isSaving) {
-    return;
-  }
+  if (isSaving) return;
 
   const appointment = getAppointmentPayload();
-  const signature = `${appointment.name}|${appointment.phone}|${appointment.service}|${appointment.date}|${appointment.time}|${appointment.notes}`;
+  const signature = `${appointment.service}|${appointment.date}|${appointment.time}|${appointment.notes}`;
 
-  if (signature === lastSavedSignature) {
-    return;
-  }
+  if (signature === lastSavedSignature) return;
 
   setSavingState(true);
 
-  const response = await fetch("/api/appointments", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(appointment)
-  });
+  try {
+    const result = await apiFetch("/api/appointments", {
+      method: "POST",
+      body: JSON.stringify({
+        dia: appointment.date,
+        hora: appointment.time,
+        service_id: appointment.service_id,
+        notas: appointment.notes,
+      }),
+    });
 
-  const result = await response.json();
-
-  if (!response.ok) {
+    lastSavedSignature = signature;
     setSavingState(false);
-    if (response.status === 401) {
+    return result.appointment;
+  } catch (error) {
+    setSavingState(false);
+    if (error?.message?.includes("401") || String(error).includes("401")) {
       redirectToRegister();
       return null;
     }
-    throw new Error(result.error || "Não foi possível salvar o agendamento.");
+    throw new Error(error?.message || "Não foi possível salvar o agendamento.");
   }
-
-  lastSavedSignature = signature;
-  setSavingState(false);
-  return result.appointment;
-}
-
-function askToOpenWhatsapp() {
-  const wantsToSend = window.confirm("Agendamento salvo. Gostaria de enviar a mensagem pelo WhatsApp?");
-
-  if (wantsToSend) {
-    window.open(whatsappLink.href, "_blank", "noopener,noreferrer");
-    return;
-  }
-
-  showToast("Agendamento salvo sem enviar mensagem pelo WhatsApp.");
 }
 
 function redirectToAppointments(appointment) {
@@ -607,7 +511,6 @@ datePickerTrigger.addEventListener("click", () => {
 
 document.addEventListener("click", (event) => {
   const selectedDate = event.target.closest("[data-booking-date]");
-
   if (selectedDate) {
     dateSelect.value = selectedDate.dataset.bookingDate;
     renderTimeSlots(dateSelect.value);
@@ -615,25 +518,19 @@ document.addEventListener("click", (event) => {
     closeBookingDatePicker();
     return;
   }
-
   if (event.target.closest("[data-close-booking-date-picker]")) {
     closeBookingDatePicker();
   }
 });
 
 document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && isBookingDatePickerOpen) {
-    closeBookingDatePicker();
-  }
+  if (event.key === "Escape" && isBookingDatePickerOpen) closeBookingDatePicker();
 });
 
 servicesGrid.addEventListener("click", (event) => {
   const button = event.target.closest(".service-select-button");
   const card = event.target.closest(".service-card[data-service]");
-
-  if (!button || !card) {
-    return;
-  }
+  if (!button || !card) return;
 
   serviceSelect.value = card.dataset.service;
   updateSummary();
@@ -641,12 +538,9 @@ servicesGrid.addEventListener("click", (event) => {
   dateSelect.focus({ preventScroll: true });
 });
 
-form.addEventListener("submit", async (event) => {
+async function handleSubmit(event) {
   event.preventDefault();
-
-  if (isSaving) {
-    return;
-  }
+  if (isSaving) return;
 
   if (!selectedTime) {
     summaryMessage.textContent = "Selecione um horário antes de confirmar o agendamento.";
@@ -655,13 +549,8 @@ form.addEventListener("submit", async (event) => {
 
   updateSummary();
 
-  if (whatsappLink.getAttribute("aria-disabled") === "true") {
-    return;
-  }
-
-  if (!requireAuthenticatedUser()) {
-    return;
-  }
+  if (whatsappLink.getAttribute("aria-disabled") === "true") return;
+  if (!requireAuthenticatedUser()) return;
 
   try {
     summaryMessage.textContent = "Salvando agendamento no banco de dados...";
@@ -674,24 +563,15 @@ form.addEventListener("submit", async (event) => {
     summaryMessage.textContent = error.message;
     showToast(error.message);
   }
-});
+}
+
+form.addEventListener("submit", handleSubmit);
 
 whatsappLink.addEventListener("click", async (event) => {
-  if (isSaving) {
-    event.preventDefault();
-    return;
-  }
-
-  if (whatsappLink.getAttribute("aria-disabled") === "true") {
-    event.preventDefault();
-    return;
-  }
-
+  if (isSaving) { event.preventDefault(); return; }
+  if (whatsappLink.getAttribute("aria-disabled") === "true") { event.preventDefault(); return; }
   event.preventDefault();
-
-  if (!requireAuthenticatedUser()) {
-    return;
-  }
+  if (!requireAuthenticatedUser()) return;
 
   try {
     summaryMessage.textContent = "Salvando agendamento no banco de dados...";
@@ -707,21 +587,15 @@ whatsappLink.addEventListener("click", async (event) => {
 });
 
 window.addEventListener("storage", (event) => {
-  if (event.key === "mnunes-services-updated") {
-    loadServices({ silent: true });
-  }
+  if (event.key === "mnunes-services-updated") loadServices({ silent: true });
 });
 
 document.addEventListener("visibilitychange", () => {
-  if (!document.hidden) {
-    loadServices({ silent: true });
-  }
+  if (!document.hidden) loadServices({ silent: true });
 });
 
 window.setInterval(() => {
-  if (!document.hidden) {
-    loadServices({ silent: true });
-  }
+  if (!document.hidden) loadServices({ silent: true });
 }, 8000);
 
 async function initializePage() {
