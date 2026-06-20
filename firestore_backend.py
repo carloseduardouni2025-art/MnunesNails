@@ -298,8 +298,8 @@ class FirestoreBackend:
         except ImportError as error:
             raise RuntimeError("Instale firebase-admin para usar Firestore.") from error
 
-        project_id = os.environ.get("FIREBASE_PROJECT_ID", "mnunesnails")
-        database_id = os.environ.get("FIREBASE_FIRESTORE_DATABASE", "mnunesnails")
+        project_id = os.environ.get("FIREBASE_PROJECT_ID", "").strip() or "mnunesnails"
+        database_id = os.environ.get("FIREBASE_FIRESTORE_DATABASE", "").strip() or "mnunesnails"
         credentials_json = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON", "").strip()
         credentials_path = os.environ.get("FIREBASE_SERVICE_ACCOUNT") or os.environ.get(
             "GOOGLE_APPLICATION_CREDENTIALS"

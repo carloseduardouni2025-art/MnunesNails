@@ -181,7 +181,7 @@ def firebase_web_config_status():
     config = {
         "apiKey": os.environ.get("FIREBASE_WEB_API_KEY", ""),
         "authDomain": os.environ.get("FIREBASE_AUTH_DOMAIN", ""),
-        "projectId": os.environ.get("FIREBASE_PROJECT_ID", "mnunesnails"),
+        "projectId": os.environ.get("FIREBASE_PROJECT_ID", "").strip() or "mnunesnails",
         "appId": os.environ.get("FIREBASE_WEB_APP_ID", ""),
         "messagingSenderId": os.environ.get("FIREBASE_MESSAGING_SENDER_ID", ""),
     }
@@ -210,7 +210,7 @@ def get_firebase_admin_app():
         FIREBASE_ADMIN_APP = firebase_admin.get_app()
         return FIREBASE_ADMIN_APP
 
-    project_id = os.environ.get("FIREBASE_PROJECT_ID", "mnunesnails")
+    project_id = os.environ.get("FIREBASE_PROJECT_ID", "").strip() or "mnunesnails"
     credentials_json = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON", "").strip()
     credentials_path = os.environ.get("FIREBASE_SERVICE_ACCOUNT") or os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
 
