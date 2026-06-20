@@ -11,6 +11,7 @@ import os
 import re
 import secrets
 import sqlite3
+import traceback
 import uuid
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -153,6 +154,15 @@ def get_firestore():
     if FIRESTORE is None:
         FIRESTORE = firestore_backend.FirestoreBackend(ROOT)
     return FIRESTORE
+
+
+def disable_firestore_fallback(error):
+    global FIRESTORE
+    print(f"Firestore indisponivel. Usando SQLite local: {error}")
+    traceback.print_exc()
+    FIRESTORE = None
+    os.environ["DATABASE_BACKEND"] = "sqlite"
+    init_database()
 
 
 def firestore_runtime_status():
@@ -864,7 +874,12 @@ def create_session(actor_type, actor_id):
 
 def register_user(payload):
     if use_firestore():
-        return get_firestore().register_user(payload)
+        try:
+            return get_firestore().register_user(payload)
+        except (AuthError, firestore_backend.AuthError, ValueError):
+            raise
+        except Exception as error:
+            disable_firestore_fallback(error)
 
     name, phone, phone_normalized, whatsapp = validate_registration_payload(payload)
     password = validate_password_payload(payload)
@@ -885,7 +900,12 @@ def register_user(payload):
 
 def login_user(payload):
     if use_firestore():
-        return get_firestore().login_user(payload)
+        try:
+            return get_firestore().login_user(payload)
+        except (AuthError, firestore_backend.AuthError, ValueError):
+            raise
+        except Exception as error:
+            disable_firestore_fallback(error)
 
     phone = str(payload.get("phone", "")).strip()
     phone_normalized = normalize_phone(phone)
@@ -923,7 +943,12 @@ def recover_user_password(payload):
 
 def login_admin(payload):
     if use_firestore():
-        return get_firestore().login_admin(payload)
+        try:
+            return get_firestore().login_admin(payload)
+        except (AuthError, firestore_backend.AuthError, ValueError):
+            raise
+        except Exception as error:
+            disable_firestore_fallback(error)
 
     phone = str(payload.get("phone", "")).strip()
     phone_normalized = normalize_phone(phone)
@@ -2017,6 +2042,15 @@ class MnunesHandler(SimpleHTTPRequestHandler):
             self.send_json({"error": str(error)}, status=401)
         except ValueError as error:
             self.send_json({"error": str(error)}, status=400)
+        except Exception as error:
+            traceback.print_exc()
+            self.send_json(
+                {
+                    "error": "Erro interno no servidor. Confira as variaveis do Firebase e tente novamente.",
+                    "details": str(error),
+                },
+                status=500,
+            )
 
     def get_filters(self, parsed):
         query = parse_qs(parsed.query)

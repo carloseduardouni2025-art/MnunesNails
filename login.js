@@ -37,7 +37,7 @@ function friendlyErrorMessage(error, fallback = "Nao foi possivel concluir a sol
   const message = error?.message || fallback;
 
   if (message.includes("Unexpected end of JSON input")) {
-    return "O servidor nao retornou resposta. Abra o site pelo servidor Python do projeto e tente novamente.";
+    return "O servidor nao retornou resposta. Recarregue a pagina e tente novamente.";
   }
 
   return message;
@@ -172,7 +172,7 @@ async function readJsonResponse(response) {
   const body = await response.text();
 
   if (!body.trim()) {
-    throw new Error("O servidor nao retornou resposta. Confirme se o site esta aberto pelo servidor Python do projeto.");
+    throw new Error("O servidor nao retornou resposta. Recarregue a pagina e tente novamente.");
   }
 
   if (!isJson) {
