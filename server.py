@@ -310,6 +310,7 @@ def ensure_column(connection, table, column, definition):
 
 def init_database():
     if use_firestore():
+        get_firestore().init_database()
         return
 
     with get_connection() as connection:
