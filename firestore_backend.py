@@ -299,9 +299,9 @@ class FirestoreBackend:
             raise RuntimeError("Instale firebase-admin para usar Firestore.") from error
 
         project_id = os.environ.get("FIREBASE_PROJECT_ID", "").strip() or "mnunesnails"
-        database_id = os.environ.get("FIREBASE_FIRESTORE_DATABASE", "").strip() or "mnunesnails"
+        database_id = os.environ.get("FIREBASE_FIRESTORE_DATABASE", "").strip() or "mnunesnails-native"
         if database_id.lower() in {"default", "(default)"}:
-            database_id = "mnunesnails"
+            database_id = "mnunesnails-native"
         credentials_json = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON", "").strip()
         credentials_path = os.environ.get("FIREBASE_SERVICE_ACCOUNT") or os.environ.get(
             "GOOGLE_APPLICATION_CREDENTIALS"
