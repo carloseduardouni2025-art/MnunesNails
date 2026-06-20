@@ -33,6 +33,16 @@ function showToast(message) {
   }, 3200);
 }
 
+function friendlyErrorMessage(error, fallback = "Nao foi possivel concluir a solicitacao.") {
+  const message = error?.message || fallback;
+
+  if (message.includes("Unexpected end of JSON input")) {
+    return "O servidor nao retornou resposta. Abra o site pelo servidor Python do projeto e tente novamente.";
+  }
+
+  return message;
+}
+
 function formPayload(form) {
   const formData = new FormData(form);
   const payload = {};
@@ -237,7 +247,7 @@ async function sendRecoveryCode() {
     showToast("Codigo SMS enviado.");
     clientRecoverForm.elements.smsCode.focus();
   } catch (error) {
-    clientRecoverFeedback.textContent = error.message || "Nao foi possivel enviar o codigo SMS.";
+    clientRecoverFeedback.textContent = friendlyErrorMessage(error, "Nao foi possivel enviar o codigo SMS.");
     showToast(clientRecoverFeedback.textContent);
 
     if (recoveryRecaptcha) {
@@ -274,8 +284,8 @@ async function submitClientLogin(event) {
     showToast("Acesso liberado.");
     window.location.href = nextUrl();
   } catch (error) {
-    clientFeedback.textContent = error.message;
-    showToast(error.message);
+    clientFeedback.textContent = friendlyErrorMessage(error);
+    showToast(clientFeedback.textContent);
   }
 }
 
@@ -288,8 +298,8 @@ async function submitClientRegister(event) {
     showToast("Cadastro criado.");
     window.location.href = nextUrl();
   } catch (error) {
-    clientRegisterFeedback.textContent = error.message;
-    showToast(error.message);
+    clientRegisterFeedback.textContent = friendlyErrorMessage(error);
+    showToast(clientRegisterFeedback.textContent);
   }
 }
 
@@ -305,8 +315,8 @@ async function submitPasswordRecovery(event) {
     showClientLogin();
     clientForm.elements.phone.value = clientRecoverForm.elements.phone.value;
   } catch (error) {
-    clientRecoverFeedback.textContent = error.message;
-    showToast(error.message);
+    clientRecoverFeedback.textContent = friendlyErrorMessage(error);
+    showToast(clientRecoverFeedback.textContent);
   }
 }
 
@@ -319,8 +329,8 @@ async function submitAdminLogin(event) {
     showToast("Acesso administrativo liberado.");
     window.location.href = "admin.html";
   } catch (error) {
-    adminFeedback.textContent = error.message;
-    showToast(error.message);
+    adminFeedback.textContent = friendlyErrorMessage(error);
+    showToast(adminFeedback.textContent);
   }
 }
 
