@@ -1,4 +1,4 @@
-let availabilityByDate = {};
+let servicesDurationByName = {};
 
 const form = document.getElementById("booking-form");
 const dateSelect = document.getElementById("date-select");
@@ -28,6 +28,9 @@ const CALENDAR_DAYS_SHORT = ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SAB"];
 const CALENDAR_DAYS_LONG = ["Domingo", "Segunda-feira", "Terca-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sabado"];
 const CALENDAR_MONTHS = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
+const SLOTS_START_MINUTES = 7 * 60;
+const SLOTS_END_MINUTES = 19 * 60;
+
 function storeBookingDraft() {
   sessionStorage.setItem(BOOKING_DRAFT_KEY, JSON.stringify(getAppointmentPayload()));
 }
@@ -55,6 +58,21 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+function parseDuration(durationStr) {
+  const match = String(durationStr || "").match(/(\d+)/);
+  return match ? parseInt(match[1], 10) : 30;
+}
+
+function generateTimeSlots(durationMinutes) {
+  const slots = [];
+  for (let m = SLOTS_START_MINUTES; m <= SLOTS_END_MINUTES; m += durationMinutes) {
+    const h = Math.floor(m / 60);
+    const min = m % 60;
+    slots.push(`${h}:${String(min).padStart(2, "0")}`);
+  }
+  return slots;
 }
 
 function getDateLabel(date) {
@@ -143,9 +161,46 @@ function closeBookingDatePicker() {
   renderBookingDatePicker();
 }
 
+function renderTimeSlotsForDate() {
+  timeSlots.innerHTML = "";
+  selectedTime = "";
+
+  if (!dateSelect.value) {
+    timeSlots.innerHTML = "<p class='empty-state'>Escolha um dia para ver os horários.</p>";
+    updateSummary();
+    return;
+  }
+
+  if (!serviceSelect.value) {
+    timeSlots.innerHTML = "<p class='empty-state'>Selecione um serviço para ver os horários.</p>";
+    updateSummary();
+    return;
+  }
+
+  const duration = servicesDurationByName[serviceSelect.value] || 30;
+  const slots = generateTimeSlots(duration);
+
+  slots.forEach((time) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "time-slot";
+    button.textContent = time;
+    button.addEventListener("click", () => {
+      document.querySelectorAll(".time-slot").forEach((s) => s.classList.remove("active"));
+      button.classList.add("active");
+      selectedTime = time;
+      updateSummary();
+    });
+    timeSlots.appendChild(button);
+  });
+
+  updateSummary();
+}
+
 function renderServices(services) {
   const selectedService = serviceSelect.value;
   servicesById = {};
+  servicesDurationByName = {};
   servicesGrid.dataset.count = String(services.length);
 
   if (!services.length) {
@@ -164,6 +219,7 @@ function renderServices(services) {
   servicesGrid.innerHTML = activeServices
     .map((service, index) => {
       servicesById[service.name] = service.id;
+      servicesDurationByName[service.name] = parseDuration(service.duration);
       return `
         <article class="service-card ${index === mostBookedIndex ? "featured" : ""}" data-service="${escapeHtml(service.name)}">
           ${index === mostBookedIndex ? '<p class="service-tag">Mais pedido</p>' : ""}
@@ -212,69 +268,6 @@ async function loadServices({ silent = false } = {}) {
   }
 }
 
-function renderTimeSlots(slots) {
-  timeSlots.innerHTML = "";
-  selectedTime = "";
-
-  if (!slots || !slots.length) {
-    timeSlots.innerHTML = "<p class='empty-state'>Nenhum horário disponível neste dia.</p>";
-    updateSummary();
-    return;
-  }
-
-  slots.forEach((slot) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "time-slot";
-    button.textContent = slot.time;
-
-    if (!slot.isAvailable) {
-      button.disabled = true;
-      button.textContent = `${slot.time} indisponivel`;
-    }
-
-    button.addEventListener("click", () => {
-      if (button.disabled) return;
-      document.querySelectorAll(".time-slot").forEach((s) => s.classList.remove("active"));
-      button.classList.add("active");
-      selectedTime = slot.time;
-      updateSummary();
-    });
-
-    timeSlots.appendChild(button);
-  });
-
-  updateSummary();
-}
-
-async function loadSlotsForDate(dateLabel) {
-  timeSlots.innerHTML = "<p class='empty-state'>Carregando horários...</p>";
-  selectedTime = "";
-  updateSummary();
-
-  if (!dateLabel) {
-    timeSlots.innerHTML = "<p class='empty-state'>Escolha um dia para ver os horários.</p>";
-    return;
-  }
-
-  if (availabilityByDate[dateLabel] !== undefined) {
-    renderTimeSlots(availabilityByDate[dateLabel]);
-    return;
-  }
-
-  try {
-    const [, datePart] = dateLabel.split(", ");
-    const [day, month, year] = datePart.split("/");
-    const apiDate = `${year}-${month}-${day}`;
-    const result = await apiFetch(`/api/availability?date=${apiDate}`);
-    const slots = result.availability?.[0]?.slots || [];
-    availabilityByDate[dateLabel] = slots;
-    renderTimeSlots(slots);
-  } catch (error) {
-    timeSlots.innerHTML = `<p class='empty-state'>${error?.message || "Nao foi possivel carregar os horarios."}</p>`;
-  }
-}
-
 function selectTimeSlot(time) {
   if (!time) return;
 
@@ -308,9 +301,8 @@ function restoreBookingDraft() {
   if (draft.date) {
     dateSelect.value = draft.date;
     updateDatePickerTrigger();
-    loadSlotsForDate(draft.date).then(() => {
-      selectTimeSlot(draft.time);
-    });
+    renderTimeSlotsForDate();
+    selectTimeSlot(draft.time);
   }
 
   clearBookingDraft();
@@ -471,7 +463,11 @@ function redirectToAppointments(appointment) {
   window.location.href = `agendamentos.html${params}`;
 }
 
-serviceSelect.addEventListener("change", updateSummary);
+serviceSelect.addEventListener("change", () => {
+  updateSummary();
+  if (dateSelect.value) renderTimeSlotsForDate();
+});
+
 form.addEventListener("input", updateSummary);
 
 datePickerTrigger.addEventListener("click", () => {
@@ -502,11 +498,10 @@ document.addEventListener("click", (event) => {
 
   const selectedDate = event.target.closest("[data-booking-date]");
   if (selectedDate) {
-    const dateLabel = selectedDate.dataset.bookingDate;
-    dateSelect.value = dateLabel;
+    dateSelect.value = selectedDate.dataset.bookingDate;
     updateDatePickerTrigger();
     closeBookingDatePicker();
-    loadSlotsForDate(dateLabel);
+    renderTimeSlotsForDate();
     return;
   }
 
