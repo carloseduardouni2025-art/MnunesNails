@@ -161,7 +161,7 @@ function closeBookingDatePicker() {
   renderBookingDatePicker();
 }
 
-function renderTimeSlotsForDate() {
+async function renderTimeSlotsForDate() {
   timeSlots.innerHTML = "";
   selectedTime = "";
 
@@ -177,10 +177,28 @@ function renderTimeSlotsForDate() {
     return;
   }
 
-  const duration = servicesDurationByName[serviceSelect.value] || 30;
-  const slots = generateTimeSlots(duration);
+  timeSlots.innerHTML = "<p class='empty-state'>Carregando horários...</p>";
 
-  slots.forEach((time) => {
+  let takenTimes = [];
+  try {
+    const result = await apiFetch(`/api/appointments/taken?date=${encodeURIComponent(dateSelect.value)}`);
+    takenTimes = result.takenTimes || [];
+  } catch (err) {
+    console.error("[horários] falha ao buscar horários ocupados:", err);
+  }
+
+  const duration = servicesDurationByName[serviceSelect.value] || 30;
+  const availableSlots = generateTimeSlots(duration).filter((time) => !takenTimes.includes(time));
+
+  timeSlots.innerHTML = "";
+
+  if (!availableSlots.length) {
+    timeSlots.innerHTML = "<p class='empty-state'>Nenhum horário disponível neste dia.</p>";
+    updateSummary();
+    return;
+  }
+
+  availableSlots.forEach((time) => {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "time-slot";
@@ -281,7 +299,7 @@ function selectTimeSlot(time) {
   updateSummary();
 }
 
-function restoreBookingDraft() {
+async function restoreBookingDraft() {
   const rawDraft = sessionStorage.getItem(BOOKING_DRAFT_KEY);
   if (!rawDraft) return;
 
@@ -301,7 +319,7 @@ function restoreBookingDraft() {
   if (draft.date) {
     dateSelect.value = draft.date;
     updateDatePickerTrigger();
-    renderTimeSlotsForDate();
+    await renderTimeSlotsForDate();
     selectTimeSlot(draft.time);
   }
 
@@ -454,7 +472,9 @@ async function saveAppointment() {
       redirectToRegister();
       return null;
     }
-    throw new Error(error?.message || "Não foi possível salvar o agendamento.");
+    const err = new Error(error?.message || "Não foi possível salvar o agendamento.");
+    if (error?.message === "Horário já está agendado") err.conflict = true;
+    throw err;
   }
 }
 
@@ -549,6 +569,7 @@ async function handleSubmit(event) {
     setSavingState(false);
     summaryMessage.textContent = error.message;
     showToast(error.message);
+    if (error.conflict) renderTimeSlotsForDate();
   }
 }
 
@@ -570,6 +591,7 @@ whatsappLink.addEventListener("click", async (event) => {
     setSavingState(false);
     summaryMessage.textContent = error.message;
     showToast(error.message);
+    if (error.conflict) renderTimeSlotsForDate();
   }
 });
 
@@ -589,7 +611,7 @@ async function initializePage() {
   await loadServices();
   await loadCurrentUser();
   timeSlots.innerHTML = "<p class='empty-state'>Escolha um dia para ver os horários.</p>";
-  restoreBookingDraft();
+  await restoreBookingDraft();
 }
 
 initializePage();
