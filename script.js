@@ -1,4 +1,4 @@
-let availability = {};
+let availabilityByDate = {};
 
 const form = document.getElementById("booking-form");
 const dateSelect = document.getElementById("date-select");
@@ -22,6 +22,11 @@ let currentUser = null;
 let servicesSignature = "";
 let isBookingDatePickerOpen = false;
 let servicesById = {};
+let calendarCurrentDate = new Date();
+
+const CALENDAR_DAYS_SHORT = ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SAB"];
+const CALENDAR_DAYS_LONG = ["Domingo", "Segunda-feira", "Terca-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sabado"];
+const CALENDAR_MONTHS = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
 function storeBookingDraft() {
   sessionStorage.setItem(BOOKING_DRAFT_KEY, JSON.stringify(getAppointmentPayload()));
@@ -52,42 +57,18 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
-function populateDates() {
-  dateSelect.innerHTML = '<option value="">Escolha uma data</option>';
-
-  Object.keys(availability).forEach((date) => {
-    const option = document.createElement("option");
-    option.value = date;
-    option.textContent = date;
-    dateSelect.appendChild(option);
-  });
-
-  updateDatePickerTrigger();
+function getDateLabel(date) {
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const year = date.getFullYear();
+  return `${CALENDAR_DAYS_LONG[date.getDay()]}, ${day}/${month}/${year}`;
 }
 
-function getAvailabilityDateParts(dateLabel) {
-  const [weekday = "", date = ""] = String(dateLabel || "").split(", ");
-  const [day = "--", month = ""] = date.split("/");
-  const monthNames = {
-    "01": "jan.", "02": "fev.", "03": "mar.", "04": "abr.",
-    "05": "mai.", "06": "jun.", "07": "jul.", "08": "ago.",
-    "09": "set.", "10": "out.", "11": "nov.", "12": "dez."
-  };
-
-  return {
-    weekday: weekday.slice(0, 3).toUpperCase(),
-    day,
-    month: monthNames[month] || month
-  };
-}
-
-function getWeekdayColumn(dateLabel) {
-  const [weekday = ""] = String(dateLabel || "").split(", ");
-  const columns = {
-    Domingo: 0, "Segunda-feira": 1, "Terca-feira": 2, "Quarta-feira": 3,
-    "Quinta-feira": 4, "Sexta-feira": 5, Sabado: 6
-  };
-  return columns[weekday] || 0;
+function getWeekStart(date) {
+  const d = new Date(date);
+  d.setDate(d.getDate() - d.getDay());
+  d.setHours(0, 0, 0, 0);
+  return d;
 }
 
 function updateDatePickerTrigger() {
@@ -100,21 +81,17 @@ function renderBookingDatePicker() {
 
   if (!isBookingDatePickerOpen) return;
 
-  const dates = Object.keys(availability);
-  const monthGroups = [];
-
-  dates.forEach((dateLabel) => {
-    const dateParts = getAvailabilityDateParts(dateLabel);
-    const monthLabel = dateParts.month || "mes";
-    let monthGroup = monthGroups.find((item) => item.month === monthLabel);
-
-    if (!monthGroup) {
-      monthGroup = { month: monthLabel, dates: [] };
-      monthGroups.push(monthGroup);
-    }
-
-    monthGroup.dates.push(dateLabel);
+  const weekStart = getWeekStart(calendarCurrentDate);
+  const weekDays = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(weekStart);
+    d.setDate(weekStart.getDate() + i);
+    return d;
   });
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const monthYear = `${CALENDAR_MONTHS[calendarCurrentDate.getMonth()]} ${calendarCurrentDate.getFullYear()}`;
 
   const dialog = document.createElement("div");
   dialog.className = "availability-date-dialog booking-date-dialog open";
@@ -132,34 +109,29 @@ function renderBookingDatePicker() {
         <button class="date-dialog-close" type="button" data-close-booking-date-picker aria-label="Fechar calendario">&times;</button>
       </div>
       <div class="date-dialog-body">
-        ${monthGroups.map((monthGroup) => `
-          <section class="date-dialog-month">
-            <h4>${escapeHtml(monthGroup.month)}</h4>
-            <div class="date-dialog-weekdays" aria-hidden="true">
-              <span>DOM</span><span>SEG</span><span>TER</span><span>QUA</span>
-              <span>QUI</span><span>SEX</span><span>SAB</span>
-            </div>
-            <div class="date-dialog-grid">
-              ${Array.from({ length: getWeekdayColumn(monthGroup.dates[0]) }).map(() => `
-                <span class="date-dialog-empty" aria-hidden="true"></span>
-              `).join("")}
-              ${monthGroup.dates.map((dateLabel) => {
-                const dateParts = getAvailabilityDateParts(dateLabel);
-                const isActive = dateLabel === dateSelect.value;
-                return `
-                  <button
-                    class="date-dialog-day ${isActive ? "active" : ""}"
-                    type="button"
-                    data-booking-date="${escapeHtml(dateLabel)}"
-                  >
-                    <span>${escapeHtml(dateParts.weekday)}</span>
-                    <strong>${escapeHtml(dateParts.day)}</strong>
-                  </button>
-                `;
-              }).join("")}
-            </div>
-          </section>
-        `).join("")}
+        <div class="date-dialog-week-nav">
+          <button class="date-dialog-nav-today" type="button" data-calendar-today>Hoje</button>
+          <button class="date-dialog-nav-arrow" type="button" data-calendar-prev>&lt;</button>
+          <span class="date-dialog-nav-month">${escapeHtml(monthYear)}</span>
+          <button class="date-dialog-nav-arrow" type="button" data-calendar-next>&gt;</button>
+        </div>
+        <div class="date-dialog-grid">
+          ${weekDays.map((date) => {
+            const dateLabel = getDateLabel(date);
+            const isActive = dateLabel === dateSelect.value;
+            const isToday = date.getTime() === today.getTime();
+            return `
+              <button
+                class="date-dialog-day${isActive ? " active" : ""}${isToday ? " today" : ""}"
+                type="button"
+                data-booking-date="${escapeHtml(dateLabel)}"
+              >
+                <span>${CALENDAR_DAYS_SHORT[date.getDay()]}</span>
+                <strong>${date.getDate()}</strong>
+              </button>
+            `;
+          }).join("")}
+        </div>
       </div>
     </div>
   `;
@@ -240,17 +212,17 @@ async function loadServices({ silent = false } = {}) {
   }
 }
 
-function renderTimeSlots(date) {
+function renderTimeSlots(slots) {
   timeSlots.innerHTML = "";
   selectedTime = "";
 
-  if (!date || !availability[date]) {
-    timeSlots.innerHTML = "<p class='empty-state'>Escolha um dia para ver os horários.</p>";
+  if (!slots || !slots.length) {
+    timeSlots.innerHTML = "<p class='empty-state'>Nenhum horário disponível neste dia.</p>";
     updateSummary();
     return;
   }
 
-  availability[date].forEach((slot) => {
+  slots.forEach((slot) => {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "time-slot";
@@ -273,6 +245,34 @@ function renderTimeSlots(date) {
   });
 
   updateSummary();
+}
+
+async function loadSlotsForDate(dateLabel) {
+  timeSlots.innerHTML = "<p class='empty-state'>Carregando horários...</p>";
+  selectedTime = "";
+  updateSummary();
+
+  if (!dateLabel) {
+    timeSlots.innerHTML = "<p class='empty-state'>Escolha um dia para ver os horários.</p>";
+    return;
+  }
+
+  if (availabilityByDate[dateLabel] !== undefined) {
+    renderTimeSlots(availabilityByDate[dateLabel]);
+    return;
+  }
+
+  try {
+    const [, datePart] = dateLabel.split(", ");
+    const [day, month, year] = datePart.split("/");
+    const apiDate = `${year}-${month}-${day}`;
+    const result = await apiFetch(`/api/availability?date=${apiDate}`);
+    const slots = result.availability?.[0]?.slots || [];
+    availabilityByDate[dateLabel] = slots;
+    renderTimeSlots(slots);
+  } catch (error) {
+    timeSlots.innerHTML = `<p class='empty-state'>${error?.message || "Nao foi possivel carregar os horarios."}</p>`;
+  }
 }
 
 function selectTimeSlot(time) {
@@ -305,42 +305,17 @@ function restoreBookingDraft() {
   form.elements.service.value = draft.service || "";
   form.elements.notes.value = draft.notes || "";
 
-  if (draft.date && availability[draft.date]) {
+  if (draft.date) {
     dateSelect.value = draft.date;
     updateDatePickerTrigger();
-    renderTimeSlots(draft.date);
-    selectTimeSlot(draft.time);
+    loadSlotsForDate(draft.date).then(() => {
+      selectTimeSlot(draft.time);
+    });
   }
 
   clearBookingDraft();
   showToast("Cadastro concluido. Revise e confirme seu agendamento.");
   document.getElementById("agendamento").scrollIntoView({ behavior: "smooth", block: "start" });
-}
-
-async function loadAvailability() {
-  try {
-    const result = await apiFetch("/api/availability");
-    availability = {};
-
-    (result.availability || []).forEach((dateGroup) => {
-      const freeSlots = dateGroup.slots.filter((slot) => slot.isAvailable);
-      if (freeSlots.length) availability[dateGroup.date] = freeSlots;
-    });
-
-    const previousDate = dateSelect.value;
-    populateDates();
-    if (previousDate && availability[previousDate]) {
-      dateSelect.value = previousDate;
-      updateDatePickerTrigger();
-      renderTimeSlots(previousDate);
-    } else {
-      dateSelect.value = "";
-      updateDatePickerTrigger();
-      renderTimeSlots("");
-    }
-  } catch (error) {
-    timeSlots.innerHTML = `<p class='empty-state'>${error?.message || "Nao foi possivel carregar os horarios."}</p>`;
-  }
 }
 
 function showToast(message) {
@@ -496,11 +471,6 @@ function redirectToAppointments(appointment) {
   window.location.href = `agendamentos.html${params}`;
 }
 
-dateSelect.addEventListener("change", (event) => {
-  renderTimeSlots(event.target.value);
-  updateDatePickerTrigger();
-});
-
 serviceSelect.addEventListener("change", updateSummary);
 form.addEventListener("input", updateSummary);
 
@@ -510,14 +480,36 @@ datePickerTrigger.addEventListener("click", () => {
 });
 
 document.addEventListener("click", (event) => {
-  const selectedDate = event.target.closest("[data-booking-date]");
-  if (selectedDate) {
-    dateSelect.value = selectedDate.dataset.bookingDate;
-    renderTimeSlots(dateSelect.value);
-    updateDatePickerTrigger();
-    closeBookingDatePicker();
+  if (event.target.closest("[data-calendar-today]")) {
+    calendarCurrentDate = new Date();
+    renderBookingDatePicker();
     return;
   }
+
+  if (event.target.closest("[data-calendar-prev]")) {
+    calendarCurrentDate = new Date(calendarCurrentDate);
+    calendarCurrentDate.setDate(calendarCurrentDate.getDate() - 7);
+    renderBookingDatePicker();
+    return;
+  }
+
+  if (event.target.closest("[data-calendar-next]")) {
+    calendarCurrentDate = new Date(calendarCurrentDate);
+    calendarCurrentDate.setDate(calendarCurrentDate.getDate() + 7);
+    renderBookingDatePicker();
+    return;
+  }
+
+  const selectedDate = event.target.closest("[data-booking-date]");
+  if (selectedDate) {
+    const dateLabel = selectedDate.dataset.bookingDate;
+    dateSelect.value = dateLabel;
+    updateDatePickerTrigger();
+    closeBookingDatePicker();
+    loadSlotsForDate(dateLabel);
+    return;
+  }
+
   if (event.target.closest("[data-close-booking-date-picker]")) {
     closeBookingDatePicker();
   }
@@ -535,7 +527,7 @@ servicesGrid.addEventListener("click", (event) => {
   serviceSelect.value = card.dataset.service;
   updateSummary();
   document.getElementById("agendamento").scrollIntoView({ behavior: "smooth", block: "start" });
-  dateSelect.focus({ preventScroll: true });
+  datePickerTrigger.focus({ preventScroll: true });
 });
 
 async function handleSubmit(event) {
@@ -600,8 +592,8 @@ window.setInterval(() => {
 
 async function initializePage() {
   await loadServices();
-  await loadAvailability();
   await loadCurrentUser();
+  timeSlots.innerHTML = "<p class='empty-state'>Escolha um dia para ver os horários.</p>";
   restoreBookingDraft();
 }
 
